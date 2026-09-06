@@ -1,0 +1,17 @@
+{
+  // The build config excludes `test/` so it never lands in dist/. This one
+  // exists purely so the test sources are still typechecked in CI.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    // Widened from src/ to the package root so test/ is inside it. Nothing is
+    // emitted here, so the layout of a dist/ tree is irrelevant.
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

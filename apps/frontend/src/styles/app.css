@@ -1,0 +1,152 @@
+/*
+ * Bootstrap carries the layout and components; this file only adds what a
+ * wall-mounted display needs on top — a fixed-height day grid, larger type at
+ * viewing distance, and a discreet way back to the admin page.
+ */
+
+:root {
+  --pical-day-min-width: 12rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* --- Dashboard ---------------------------------------------------------- */
+
+.dashboard {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.dashboard__clock {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard__date {
+  font-size: clamp(0.9rem, 1.4vw, 1.25rem);
+}
+
+/*
+ * One column per day, all equal width, scrolling inside themselves rather than
+ * pushing the page — a wall display must never require scrolling the body.
+ * Below tablet width the columns wrap into a normal vertical list.
+ */
+.dashboard__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--pical-day-min-width), 1fr));
+  gap: 0.75rem;
+  overflow: hidden;
+}
+
+@media (max-width: 767.98px) {
+  .dashboard {
+    height: auto;
+    overflow: visible;
+  }
+
+  .dashboard__grid {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+}
+
+.day-column {
+  min-height: 0;
+}
+
+.day-column__body {
+  overflow-y: auto;
+  padding: 0.6rem;
+}
+
+.day-column--today {
+  border-width: 2px;
+}
+
+/* --- Events -------------------------------------------------------------- */
+
+.event-card {
+  background-color: var(--bs-tertiary-bg);
+  border-left-style: solid;
+}
+
+.event-card--past {
+  opacity: 0.45;
+}
+
+.event-card__time {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-card__summary {
+  font-size: 1rem;
+  line-height: 1.25;
+  /* Long team names are common in SportsEngine feeds; wrap rather than clip. */
+  overflow-wrap: anywhere;
+}
+
+.event-card__meta {
+  font-size: 0.78rem;
+}
+
+.feed-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* --- Admin --------------------------------------------------------------- */
+
+/*
+ * Corner target that opens the admin page. Kept nearly invisible so it does not
+ * distract on the wall, but large enough to hit reliably by touch.
+ */
+.dashboard-admin-hotspot {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 1030;
+  width: 3rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bs-secondary-color);
+  opacity: 0.15;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.dashboard-admin-hotspot:hover,
+.dashboard-admin-hotspot:focus-visible {
+  opacity: 1;
+}
+
+.feed-url {
+  max-width: 22rem;
+}
+
+.spin {
+  display: inline-block;
+  animation: pical-spin 1s linear infinite;
+}
+
+@keyframes pical-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

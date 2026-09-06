@@ -1,0 +1,123 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_verify:
+        description: 'Deploy without re-running CI (use only to roll forward a hotfix)'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let two deploys touch the device at once.
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: ${{ !inputs.skip_verify }}
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy
+    needs: [verify]
+    # `always()` lets a skip_verify dispatch through while still failing the
+    # deploy if the verify job ran and did not succeed.
+    if: ${{ always() && (needs.verify.result == 'success' || inputs.skip_verify) }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check deployment is configured
+        id: guard
+        env:
+          HOST: ${{ secrets.PI_HOST }}
+        run: |
+          if [ -z "$HOST" ]; then
+            echo "PI_HOST is not set — skipping deploy. See docs/SETUP.md."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.configured == 'true'
+
+      - name: Configure SSH
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          SSH_KEY: ${{ secrets.PI_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PI_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Pinned host key: never StrictHostKeyChecking=no on a deploy path.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Copy source to the device
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          PI_HOST: ${{ secrets.PI_HOST }}
+          PI_USER: ${{ secrets.PI_USER }}
+          PI_PORT: ${{ secrets.PI_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/picalendar' }}
+        run: |
+          # Source is shipped, not build output: better-sqlite3 is a native
+          # module and must be compiled/linked on the Pi's own architecture.
+          # --delete keeps the checkout identical to the repo, but the data
+          # directory and .env live outside DEPLOY_PATH and are untouched.
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude 'dist' \
+            --exclude '.env' \
+            -e "ssh -i ~/.ssh/id_deploy -p ${PI_PORT}" \
+            ./ "${PI_USER}@${PI_HOST}:${DEPLOY_PATH}/"
+
+      - name: Build, migrate and restart
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          PI_HOST: ${{ secrets.PI_HOST }}
+          PI_USER: ${{ secrets.PI_USER }}
+          PI_PORT: ${{ secrets.PI_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/picalendar' }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$PI_PORT" "${PI_USER}@${PI_HOST}" bash -euo pipefail <<REMOTE
+            cd "${DEPLOY_PATH}"
+            npm ci
+            npm run build
+            # Migrations are forward-only and run inside a transaction, so this
+            # is safe to repeat and a no-op when nothing is pending.
+            npm run migrate
+            sudo systemctl restart picalendar
+          REMOTE
+
+      - name: Wait for the service to come back healthy
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          PI_HOST: ${{ secrets.PI_HOST }}
+          PI_USER: ${{ secrets.PI_USER }}
+          PI_PORT: ${{ secrets.PI_PORT || '22' }}
+          APP_PORT: ${{ vars.APP_PORT || '4000' }}
+        run: |
+          # Probed from the device itself, so this works whether or not the
+          # app's port is reachable from the internet.
+          ssh -i ~/.ssh/id_deploy -p "$PI_PORT" "${PI_USER}@${PI_HOST}" bash -euo pipefail <<REMOTE
+            for attempt in \$(seq 1 20); do
+              if curl -fsS "http://127.0.0.1:${APP_PORT}/api/health" > /tmp/health.json; then
+                cat /tmp/health.json
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "Service did not become healthy in 60s" >&2
+            sudo journalctl -u picalendar -n 60 --no-pager >&2
+            exit 1
+          REMOTE

@@ -1,0 +1,40 @@
+{
+  "name": "picalendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Wall-mounted calendar dashboard for Raspberry Pi, aggregating SportsEngine and Apple iCloud shared calendars.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @picalendar/shared && npm run build --workspace @picalendar/backend && npm run build --workspace @picalendar/frontend",
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "npm run dev --workspace @picalendar/backend",
+    "dev:frontend": "npm run dev --workspace @picalendar/frontend",
+    "start": "npm run start --workspace @picalendar/backend",
+    "migrate": "npm run migrate --workspace @picalendar/backend",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "rm -rf apps/*/dist packages/*/dist node_modules/.cache"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0"
+  }
+}

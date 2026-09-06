@@ -1,0 +1,49 @@
+# systemd unit for the piCalendar backend (which also serves the SPA).
+# Install to /etc/systemd/system/picalendar.service
+
+[Unit]
+Description=piCalendar - household calendar dashboard
+Documentation=https://github.com/your-user/piCalendar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=picalendar
+Group=picalendar
+WorkingDirectory=/opt/picalendar
+EnvironmentFile=/etc/picalendar/picalendar.env
+ExecStart=/usr/bin/node /opt/picalendar/apps/backend/dist/index.js
+
+# The app closes SQLite cleanly on SIGTERM; give it room before SIGKILL so the
+# WAL is checkpointed rather than recovered on next boot.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+Restart=on-failure
+RestartSec=5
+# Do not enter a tight restart loop if the config is broken.
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# --- Hardening. The app needs nothing but its data directory. ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/picalendar
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+# Logs go to the journal: journalctl -u picalendar -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=picalendar
+
+[Install]
+WantedBy=multi-user.target

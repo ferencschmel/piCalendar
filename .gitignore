@@ -141,3 +141,16 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# --- piCalendar ---
+# SQLite database and its WAL/shm sidecars
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+apps/backend/data/
+
+# Scratch directory used during development
+.tmp/
+
+# TypeScript project-references build info
+*.tsbuildinfo

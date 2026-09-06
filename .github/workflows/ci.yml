@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # Lets the deploy workflow reuse this exact pipeline as its gate, rather
+  # than maintaining a second copy of the checks.
+  workflow_call:
+
+concurrency:
+  # A new push supersedes an in-flight run for the same ref.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is what the Pi runs; 24 catches deprecations before they land there.
+        node-version: ['22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The backend and frontend both compile against @picalendar/shared's
+      # emitted types, so it has to be built before anything else runs.
+      - name: Build shared package
+        run: npm run build --workspace @picalendar/shared
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload frontend build
+        # One artifact is enough; the matrix produces identical output.
+        if: matrix.node-version == '22'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: apps/frontend/dist
+          retention-days: 7
+
+  timezone-matrix:
+    name: Date handling under other timezones
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Calendar bugs hide behind the runner's UTC clock. These zones cover
+        # both sides of UTC and a non-hour offset.
+        timezone: ['UTC', 'Pacific/Auckland', 'America/Los_Angeles', 'Asia/Kolkata']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build --workspace @picalendar/shared
+
+      - name: Test with TZ=${{ matrix.timezone }}
+        env:
+          TZ: ${{ matrix.timezone }}
+        run: npm test
