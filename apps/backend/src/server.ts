@@ -29,9 +29,17 @@ export function createServer(): Express {
               styleSrc: ["'self'", "'unsafe-inline'"],
               imgSrc: ["'self'", 'data:'],
               connectSrc: ["'self'"],
+              // helmet enables upgrade-insecure-requests by default. On a
+              // plain-HTTP LAN install that rewrites the bundle URLs to
+              // https:// and the page renders blank, so only ask for it when
+              // the app really is reachable over TLS.
+              ...(config.https.enabled ? {} : { upgradeInsecureRequests: null }),
             },
           }
         : false,
+      // Same reasoning: pinning HSTS from an http:// response would lock the
+      // browser out of the dashboard on the next visit.
+      hsts: config.https.enabled,
     }),
   );
   app.use(cors({ origin: config.corsOrigins.length > 0 ? config.corsOrigins : false }));

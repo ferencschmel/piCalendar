@@ -257,6 +257,7 @@ matter most:
 | `SYNC_TICK_SECONDS`             | `60`                                  | Scheduler resolution; each feed has its own interval |
 | `OCCURRENCE_WINDOW_FUTURE_DAYS` | `180`                                 | How far ahead recurring events are materialised      |
 | `PRESENCE_WINDOW_SECONDS`       | `300`                                 | How long a camera sighting keeps someone "present"   |
+| `HTTPS_ENABLED`                 | `false`                               | Only `true` behind real TLS — see troubleshooting    |
 | `ADMIN_TOKEN`                   | unset                                 | See below                                            |
 
 ### About `ADMIN_TOKEN`
@@ -288,6 +289,38 @@ Restore by stopping the service, replacing the file, and starting it again.
 ---
 
 ## 8. Troubleshooting
+
+**The page is blank / white, but `curl` returns the HTML.** The browser fetched
+`index.html` and then failed to fetch the bundle it references, so React never
+mounted and `<div id="root">` stayed empty. Open the browser console: repeated
+`net::ERR_SSL_PROTOCOL_ERROR` on `/assets/*.js` means something asked the
+browser to upgrade those requests to https on a server that only speaks http.
+Check `HTTPS_ENABLED` is `false` in `picalendar.env` (it must be, unless you
+have actually put TLS in front of the app) and confirm the response has no
+`upgrade-insecure-requests` and no `Strict-Transport-Security`:
+
+```bash
+curl -sI http://<pi-address>:4000/ | grep -iE 'content-security-policy|strict-transport'
+```
+
+If a browser already cached an HSTS pin for the host, clear it at
+`chrome://net-internals/#hsts` — the header is gone but the pin outlives it.
+
+**Nothing answers on port 80** (`ERR_CONNECTION_REFUSED` for
+`http://<pi-address>/`). The Node process listens on `PORT`, **4000** by
+default — nothing binds 80 unless you put nginx in front. Either use
+`http://<pi-address>:4000/`, or install the reverse proxy:
+
+```bash
+sudo apt-get install -y nginx
+sudo cp /opt/picalendar/deploy/nginx-picalendar.conf /etc/nginx/sites-available/picalendar
+sudo ln -sf /etc/nginx/sites-available/picalendar /etc/nginx/sites-enabled/picalendar
+sudo rm -f /etc/nginx/sites-enabled/default   # it also claims default_server
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Binding the app to 80 directly is the other option, but a port below 1024 needs
+root or `CAP_NET_BIND_SERVICE`, which is exactly what the hardened unit avoids.
 
 **A feed shows "Failed" in the admin table.** Hover the status for the message;
 it is also in `lastError` from `GET /api/feeds`. Common causes: the iCloud

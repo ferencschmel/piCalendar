@@ -32,6 +32,13 @@ const schema = z.object({
   /** Comma-separated origins allowed to call the API during development. */
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 
+  /**
+   * True only when the dashboard is actually reached over https (directly or
+   * through a TLS-terminating proxy). Enables HSTS and CSP's
+   * upgrade-insecure-requests, both of which break a plain-HTTP LAN install.
+   */
+  HTTPS_ENABLED: booleanish.default('false'),
+
   /** Background poller cadence — feeds are due based on their own interval. */
   SYNC_ENABLED: booleanish.default('true'),
   SYNC_TICK_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
@@ -75,6 +82,9 @@ export const config = {
   static: {
     enabled: env.SERVE_STATIC,
     dir: env.STATIC_DIR,
+  },
+  https: {
+    enabled: env.HTTPS_ENABLED,
   },
   corsOrigins: env.CORS_ORIGINS.split(',')
     .map((o) => o.trim())
