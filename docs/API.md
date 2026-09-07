@@ -44,12 +44,12 @@ supervisor restart a healthy process.
 
 The dashboard's only continuous query.
 
-| Query param | Default | Notes                                         |
-| ----------- | ------- | --------------------------------------------- |
-| `start`     | today   | `YYYY-MM-DD` in `DISPLAY_TIMEZONE`            |
-| `days`      | `8`     | 1–31, including the start day                 |
-| `personId`  | —       | Repeatable. Restricts to those people's feeds |
-| `feedId`    | —       | Repeatable                                    |
+| Query param | Default | Notes                                              |
+| ----------- | ------- | -------------------------------------------------- |
+| `start`     | today   | `YYYY-MM-DD` in `DISPLAY_TIMEZONE`                 |
+| `days`      | `8`     | 1–42, including the start day (a month grid is 42) |
+| `personId`  | —       | Repeatable. Restricts to those people's feeds      |
+| `feedId`    | —       | Repeatable                                         |
 
 With no `personId`, the server falls back to whoever the camera currently
 reports as present. When nobody is detected — which is always, until the camera
@@ -98,6 +98,51 @@ polls to decide whether a re-render is warranted.
 
 A multi-day event appears under **every** day it covers. One ending exactly at
 midnight belongs to the earlier day only.
+
+---
+
+## `GET /api/agenda/density`
+
+The same days as `/api/agenda`, reduced to one coloured mark per feed per day.
+This is what the dashboard's month and year overviews poll: they draw dots
+rather than text, and the year asks for 366 days at a time — enough that full
+occurrences would be megabytes of descriptions per poll.
+
+Takes the same query parameters, except `days`, which accepts **1–366**
+(default `42`).
+
+```json
+{
+  "generatedAt": "2026-09-07T16:48:22.001Z",
+  "timezone": "Europe/Budapest",
+  "coverageStart": "2026-08-24T16:48:22.000Z",
+  "coverageEnd": "2027-03-06T16:48:22.000Z",
+  "days": [
+    {
+      "date": "2026-09-07",
+      "isToday": true,
+      "marks": [
+        { "feedId": "f9…", "feedName": "Swim Club", "color": "#20c997", "count": 2 },
+        { "feedId": "3a…", "feedName": "U12 Football", "color": "#e8590c", "count": 1 }
+      ],
+      "total": 3
+    }
+  ]
+}
+```
+
+`marks` is ordered by each feed's first event of the day, and `count` is how
+many events that feed has — so one busy calendar stays one dot. `total` counts
+every occurrence on the day across all feeds.
+
+`coverageStart` / `coverageEnd` report the rolling window ingest has actually
+materialised occurrences into (`OCCURRENCE_WINDOW_PAST_DAYS` /
+`OCCURRENCE_WINDOW_FUTURE_DAYS`). A day outside it has no marks because nothing
+has been expanded there yet, **not** because the calendar is empty; the year
+view draws those days faint rather than claiming they are free.
+
+Days are bucketed exactly as `/api/agenda` buckets them, multi-day events
+included.
 
 ---
 

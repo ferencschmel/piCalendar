@@ -2,8 +2,8 @@
 
 A wall-mounted household calendar for the Raspberry Pi. It aggregates
 **SportsEngine** team schedules and **Apple iCloud shared calendars** into one
-always-on display showing today and the week ahead, and refreshes itself so the
-wall is never out of date.
+always-on display showing today and the week ahead — or the whole month or year
+at a glance — and refreshes itself so the wall is never out of date.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -31,6 +31,10 @@ wall is never out of date.
   per-provider clean-ups rather than two integrations.
 - **Stays current on its own.** Each feed has its own refresh interval; the
   browser re-polls every minute and shows a warning if it falls behind.
+- **Week, month and year.** The week is a time grid; the month is six rows of
+  seven with a coloured dot per entry; the year is twelve mini-months marked by
+  which calendars are busy. Step through months and years, or tap a day to
+  drill in.
 - **Admin page for feeds.** Add, test, colour-code, enable/disable, sync now.
   The **Test** button fetches and parses a URL before you commit to it.
 - **Correct across timezones and DST.** All-day events land on the right day and

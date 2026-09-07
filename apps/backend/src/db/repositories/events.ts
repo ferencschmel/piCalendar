@@ -1,4 +1,4 @@
-import type { AgendaDay, CalendarOccurrence } from '@picalendar/shared';
+import type { AgendaDay, AgendaDensityDay, CalendarOccurrence } from '@picalendar/shared';
 import type { Db } from '../index.js';
 import type { NormalizedEvent } from '../../ingest/types.js';
 import { contentHash, newId, occurrenceId } from '../../util/ids.js';
@@ -143,20 +143,15 @@ export interface AgendaFilters {
 }
 
 /**
- * The dashboard's hot path. One indexed range scan over `event_occurrence`,
- * joined to the parent event and feed for display metadata.
- *
- * The overlap predicate (`starts_at < end AND ends_at > start`) keeps multi-day
- * events visible on every day they cover. It stays cheap because the table only
- * ever holds the rolling materialisation window, so `starts_at < end` cannot
- * degenerate into a full scan of all history.
+ * The range-and-filter predicate shared by the agenda and the density query —
+ * they select different columns over exactly the same set of occurrences, and
+ * the two must never drift apart or a dot would appear where no event does.
  */
-export function queryOccurrences(
-  db: Db,
+function occurrenceFilter(
   rangeStart: number,
   rangeEnd: number,
-  filters: AgendaFilters = {},
-): CalendarOccurrence[] {
+  filters: AgendaFilters,
+): { where: string; params: Array<string | number> } {
   const clauses = ['o.starts_at < ?', 'o.ends_at > ?', 'f.enabled = 1'];
   const params: Array<string | number> = [rangeEnd, rangeStart];
 
@@ -173,6 +168,26 @@ export function queryOccurrences(
     params.push(...filters.personIds);
   }
 
+  return { where: clauses.join(' AND '), params };
+}
+
+/**
+ * The dashboard's hot path. One indexed range scan over `event_occurrence`,
+ * joined to the parent event and feed for display metadata.
+ *
+ * The overlap predicate (`starts_at < end AND ends_at > start`) keeps multi-day
+ * events visible on every day they cover. It stays cheap because the table only
+ * ever holds the rolling materialisation window, so `starts_at < end` cannot
+ * degenerate into a full scan of all history.
+ */
+export function queryOccurrences(
+  db: Db,
+  rangeStart: number,
+  rangeEnd: number,
+  filters: AgendaFilters = {},
+): CalendarOccurrence[] {
+  const { where, params } = occurrenceFilter(rangeStart, rangeEnd, filters);
+
   const rows = db
     .prepare<Array<string | number>, OccurrenceRow>(
       `SELECT o.id, o.event_id, o.feed_id, o.starts_at, o.ends_at, o.all_day,
@@ -181,7 +196,7 @@ export function queryOccurrences(
        FROM event_occurrence o
        JOIN event e ON e.id = o.event_id
        JOIN feed f ON f.id = o.feed_id
-       WHERE ${clauses.join(' AND ')}
+       WHERE ${where}
        ORDER BY o.starts_at ASC, o.all_day DESC, e.summary COLLATE NOCASE`,
     )
     .all(...params);
@@ -237,27 +252,82 @@ function peopleByFeed(
   return map;
 }
 
+/** An occurrence stripped down to what a coloured dot needs to be drawn. */
+export interface DensityOccurrence {
+  feedId: string;
+  feedName: string;
+  color: string;
+  startsAt: string;
+  endsAt: string;
+}
+
 /**
- * Bucket occurrences into day columns. An occurrence appears under every day it
- * overlaps, which is what a wall display should show for a multi-day trip.
+ * The same scan as {@link queryOccurrences}, selecting five columns instead of
+ * seventeen and skipping the people join entirely.
+ *
+ * The year view asks for 366 days at a time. Answering that with full
+ * occurrences would serialise megabytes of descriptions the overview never
+ * renders, once a minute, on a Raspberry Pi.
  */
-export function groupByDay(
-  occurrences: CalendarOccurrence[],
+export function queryOccurrenceDensity(
+  db: Db,
+  rangeStart: number,
+  rangeEnd: number,
+  filters: AgendaFilters = {},
+): DensityOccurrence[] {
+  const { where, params } = occurrenceFilter(rangeStart, rangeEnd, filters);
+
+  const rows = db
+    .prepare<
+      Array<string | number>,
+      { feed_id: string; feed_name: string; feed_color: string; starts_at: number; ends_at: number }
+    >(
+      `SELECT o.feed_id, o.starts_at, o.ends_at, f.name AS feed_name, f.color AS feed_color
+       FROM event_occurrence o
+       JOIN feed f ON f.id = o.feed_id
+       WHERE ${where}
+       ORDER BY o.starts_at ASC`,
+    )
+    .all(...params);
+
+  return rows.map((row) => ({
+    feedId: row.feed_id,
+    feedName: row.feed_name,
+    color: row.feed_color,
+    startsAt: new Date(row.starts_at * 1000).toISOString(),
+    endsAt: new Date(row.ends_at * 1000).toISOString(),
+  }));
+}
+
+/** Anything with a start and an end that a day bucket can be derived from. */
+interface Spanning {
+  startsAt: string;
+  endsAt: string;
+}
+
+/**
+ * Bucket spanning items by local date. An item appears under every day it
+ * overlaps, which is what a wall display should show for a multi-day trip.
+ *
+ * Shared by the agenda and the density overview so a month cell's dots and a
+ * day column's blocks can never disagree about which day an event falls on.
+ */
+function spreadAcrossDays<T extends Spanning>(
+  items: T[],
   dayKeys: string[],
   timezone: string,
-  todayKey: string,
-): AgendaDay[] {
-  const buckets = new Map<string, CalendarOccurrence[]>(dayKeys.map((key) => [key, []]));
+): Map<string, T[]> {
+  const buckets = new Map<string, T[]>(dayKeys.map((key) => [key, []]));
 
-  for (const occurrence of occurrences) {
-    const start = Math.floor(new Date(occurrence.startsAt).getTime() / 1000);
-    const end = Math.floor(new Date(occurrence.endsAt).getTime() / 1000);
+  for (const item of items) {
+    const start = Math.floor(new Date(item.startsAt).getTime() / 1000);
+    const end = Math.floor(new Date(item.endsAt).getTime() / 1000);
     // An event ending exactly at midnight belongs to the previous day only.
     const lastKey = toDayKey(Math.max(start, end - 1), timezone);
     let key = toDayKey(start, timezone);
 
     for (;;) {
-      buckets.get(key)?.push(occurrence);
+      buckets.get(key)?.push(item);
       if (key === lastKey) break;
       const next = nextKey(key);
       if (!buckets.has(next) && next > (dayKeys.at(-1) ?? next)) break;
@@ -265,11 +335,66 @@ export function groupByDay(
     }
   }
 
+  return buckets;
+}
+
+/** Bucket occurrences into the dashboard's day columns. */
+export function groupByDay(
+  occurrences: CalendarOccurrence[],
+  dayKeys: string[],
+  timezone: string,
+  todayKey: string,
+): AgendaDay[] {
+  const buckets = spreadAcrossDays(occurrences, dayKeys, timezone);
+
   return dayKeys.map((date) => ({
     date,
     isToday: date === todayKey,
     occurrences: buckets.get(date) ?? [],
   }));
+}
+
+/**
+ * Collapse a day's occurrences to one mark per feed.
+ *
+ * A year grid gives a day about the area of a fingernail, so it cannot draw a
+ * dot per event. Per-feed marks answer the question that scale can actually
+ * pose — "which calendars is this day busy with?" — and carry the count so the
+ * month view can still show one dot per entry from the same shape.
+ */
+export function groupDensityByDay(
+  rows: DensityOccurrence[],
+  dayKeys: string[],
+  timezone: string,
+  todayKey: string,
+): AgendaDensityDay[] {
+  const buckets = spreadAcrossDays(rows, dayKeys, timezone);
+
+  return dayKeys.map((date) => {
+    // Insertion order is the SQL order — earliest start first — so the marks
+    // read left to right in the order the day actually happens.
+    const marks = new Map<string, AgendaDensityDay['marks'][number]>();
+    const dayRows = buckets.get(date) ?? [];
+
+    for (const row of dayRows) {
+      const existing = marks.get(row.feedId);
+      if (existing) existing.count += 1;
+      else
+        marks.set(row.feedId, {
+          feedId: row.feedId,
+          feedName: row.feedName,
+          color: row.color,
+          count: 1,
+        });
+    }
+
+    return {
+      date,
+      isToday: date === todayKey,
+      marks: [...marks.values()],
+      total: dayRows.length,
+    };
+  });
 }
 
 function nextKey(dayKey: string): string {

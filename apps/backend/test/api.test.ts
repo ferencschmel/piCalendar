@@ -1,7 +1,13 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { AgendaResponse, Feed, HealthResponse, Person } from '@picalendar/shared';
+import type {
+  AgendaDensityResponse,
+  AgendaResponse,
+  Feed,
+  HealthResponse,
+  Person,
+} from '@picalendar/shared';
 import { closeDb, getDb } from '../src/db/index.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createServer } from '../src/server.js';
@@ -145,6 +151,46 @@ describe('GET /api/agenda', () => {
 
   it('rejects an out-of-range day count', async () => {
     expect((await call('/agenda?days=99')).status).toBe(422);
+  });
+
+  it('accepts the six weeks a month grid needs', async () => {
+    const { status, body } = await call<AgendaResponse>('/agenda?start=2026-08-31&days=42');
+    expect(status).toBe(200);
+    expect(body.days).toHaveLength(42);
+    expect(body.days.at(-1)?.date).toBe('2026-10-11');
+  });
+});
+
+describe('GET /api/agenda/density', () => {
+  it('returns a mark-only day for every day requested', async () => {
+    const { status, body } = await call<AgendaDensityResponse>(
+      '/agenda/density?start=2026-06-10&days=3',
+    );
+    expect(status).toBe(200);
+    expect(body.days.map((d) => d.date)).toEqual(['2026-06-10', '2026-06-11', '2026-06-12']);
+    expect(body.days.every((d) => d.total === 0 && d.marks.length === 0)).toBe(true);
+    expect(body.timezone).toBe('Europe/Budapest');
+  });
+
+  it('reports the window occurrences have actually been materialised into', async () => {
+    const { body } = await call<AgendaDensityResponse>('/agenda/density?days=1');
+    // Without this the year view cannot tell an empty December from an
+    // un-fetched one.
+    expect(Date.parse(body.coverageStart)).toBeLessThan(Date.now());
+    expect(Date.parse(body.coverageEnd)).toBeGreaterThan(Date.now());
+  });
+
+  it('accepts a whole leap year', async () => {
+    const { status, body } = await call<AgendaDensityResponse>(
+      '/agenda/density?start=2028-01-01&days=366',
+    );
+    expect(status).toBe(200);
+    expect(body.days).toHaveLength(366);
+    expect(body.days.at(-1)?.date).toBe('2028-12-31');
+  });
+
+  it('rejects a range longer than a year', async () => {
+    expect((await call('/agenda/density?days=400')).status).toBe(422);
   });
 });
 

@@ -1,4 +1,5 @@
 import type {
+  AgendaDensityResponse,
   AgendaResponse,
   ApiErrorBody,
   Feed,
@@ -66,15 +67,28 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+/** The range and filters both agenda endpoints take. */
+interface AgendaParams {
+  start?: string;
+  days?: number;
+  personId?: string[];
+}
+
+function agendaQuery(params: AgendaParams): string {
+  const search = new URLSearchParams();
+  if (params.start) search.set('start', params.start);
+  if (params.days) search.set('days', String(params.days));
+  for (const id of params.personId ?? []) search.append('personId', id);
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
 export const api = {
-  agenda: (params: { start?: string; days?: number; personId?: string[] } = {}) => {
-    const search = new URLSearchParams();
-    if (params.start) search.set('start', params.start);
-    if (params.days) search.set('days', String(params.days));
-    for (const id of params.personId ?? []) search.append('personId', id);
-    const query = search.toString();
-    return request<AgendaResponse>(`/agenda${query ? `?${query}` : ''}`);
-  },
+  agenda: (params: AgendaParams = {}) => request<AgendaResponse>(`/agenda${agendaQuery(params)}`),
+
+  /** Colour marks only — what the month and year overviews poll. */
+  agendaDensity: (params: AgendaParams = {}) =>
+    request<AgendaDensityResponse>(`/agenda/density${agendaQuery(params)}`),
 
   health: () => request<HealthResponse>('/health'),
 

@@ -22,11 +22,16 @@ interface Snapshot<T> {
  * Polling pauses while the tab is hidden and fires immediately on wake — a
  * kiosk browser that was asleep should not show yesterday's agenda for a
  * minute after the screen comes back.
+ *
+ * `enabled: false` parks the poll without unmounting it, which is how the
+ * dashboard keeps one hook per view and only ever fetches the one on screen —
+ * the last snapshot is held, so switching back paints immediately.
  */
 export function usePolling<T>(
   fetcher: () => Promise<T>,
   intervalMs: number,
   deps: unknown[] = [],
+  { enabled = true }: { enabled?: boolean } = {},
 ): PollingState<T> {
   const [snapshot, setSnapshot] = useState<Snapshot<T>>({
     data: null,
@@ -45,6 +50,8 @@ export function usePolling<T>(
   });
 
   useEffect(() => {
+    if (!enabled) return;
+
     // Discards a response from a previous dependency set that lands after a
     // newer one has already been applied.
     let cancelled = false;
@@ -82,15 +89,16 @@ export function usePolling<T>(
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMs, nonce, ...deps]);
+  }, [enabled, intervalMs, nonce, ...deps]);
 
   const refresh = useCallback(() => setNonce((value) => value + 1), []);
 
   return {
     ...snapshot,
     // Only the very first load has nothing to show; every later refresh keeps
-    // rendering the previous agenda.
-    loading: snapshot.data === null && snapshot.error === null,
+    // rendering the previous agenda. A parked poll is not loading — it is not
+    // going to produce anything until it is switched back on.
+    loading: enabled && snapshot.data === null && snapshot.error === null,
     refresh,
   };
 }

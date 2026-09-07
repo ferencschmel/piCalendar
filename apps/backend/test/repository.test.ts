@@ -3,7 +3,13 @@ import { openDatabase, type Db } from '../src/db/index.js';
 import { runMigrations } from '../src/db/migrate.js';
 import * as feeds from '../src/db/repositories/feeds.js';
 import * as people from '../src/db/repositories/people.js';
-import { groupByDay, queryOccurrences, replaceFeedEvents } from '../src/db/repositories/events.js';
+import {
+  groupByDay,
+  groupDensityByDay,
+  queryOccurrenceDensity,
+  queryOccurrences,
+  replaceFeedEvents,
+} from '../src/db/repositories/events.js';
 import { getPresenceState, recordSighting } from '../src/db/repositories/presence.js';
 import type { NormalizedEvent } from '../src/ingest/types.js';
 
@@ -204,6 +210,79 @@ describe('repositories', () => {
       '2026-06-10',
     );
     expect(days.map((d) => d.occurrences.length)).toEqual([1, 0]);
+  });
+
+  it('collapses a day to one density mark per feed, counting the events behind it', () => {
+    const start = Math.floor(Date.parse('2026-06-10T07:00:00Z') / 1000);
+    const other = feeds.createFeed(db, {
+      name: 'Swim',
+      sourceType: 'ics',
+      url: 'https://example.com/swim.ics',
+      enabled: true,
+      color: '#0000ff',
+      refreshIntervalSeconds: 900,
+      personIds: [],
+    }).id;
+
+    replaceFeedEvents(db, feedId, [
+      event({ uid: 'a', startsAt: start }),
+      event({ uid: 'b', startsAt: start + 7200 }),
+    ]);
+    replaceFeedEvents(db, other, [event({ uid: 'c', startsAt: start + 3600 })]);
+
+    const days = groupDensityByDay(
+      queryOccurrenceDensity(db, start - DAY, start + DAY),
+      ['2026-06-10'],
+      TZ,
+      '2026-06-10',
+    );
+
+    const day = days[0]!;
+    expect(day.total).toBe(3);
+    // Two feeds, ordered by their first event of the day, with the busier one
+    // carrying its own count rather than a second dot.
+    expect(day.marks.map((m) => [m.color, m.count])).toEqual([
+      ['#ff0000', 2],
+      ['#0000ff', 1],
+    ]);
+  });
+
+  it('spreads a multi-day event across density days exactly as the agenda does', () => {
+    const start = Math.floor(Date.parse('2026-06-09T22:00:00Z') / 1000); // 10 June, Budapest
+    replaceFeedEvents(db, feedId, [
+      event({
+        uid: 'trip',
+        allDay: true,
+        startsAt: start,
+        endsAt: start + 3 * DAY,
+        occurrences: [{ startsAt: start, endsAt: start + 3 * DAY, allDay: true }],
+      }),
+    ]);
+
+    const dayKeys = ['2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12', '2026-06-13'];
+    const density = groupDensityByDay(
+      queryOccurrenceDensity(db, start - DAY, start + 5 * DAY),
+      dayKeys,
+      TZ,
+      '2026-06-10',
+    );
+    const agenda = groupByDay(
+      queryOccurrences(db, start - DAY, start + 5 * DAY),
+      dayKeys,
+      TZ,
+      '2026-06-10',
+    );
+
+    expect(density.map((d) => d.total)).toEqual(agenda.map((d) => d.occurrences.length));
+    expect(density.map((d) => d.marks.length)).toEqual([0, 1, 1, 1, 0]);
+  });
+
+  it('excludes a disabled feed from the density marks', () => {
+    const start = Math.floor(Date.parse('2026-06-10T07:00:00Z') / 1000);
+    replaceFeedEvents(db, feedId, [event({ uid: 'a', startsAt: start })]);
+    feeds.updateFeed(db, feedId, { enabled: false });
+
+    expect(queryOccurrenceDensity(db, start - DAY, start + DAY)).toHaveLength(0);
   });
 
   it('counts someone as present only inside the sighting window', () => {

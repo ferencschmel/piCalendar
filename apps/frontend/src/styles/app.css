@@ -28,6 +28,14 @@ body,
   overflow: hidden;
 }
 
+/*
+ * Twelve month grids cannot always be squeezed into one viewport and stay
+ * legible, so the year view is the one shape that may scroll rather than shrink.
+ */
+.dashboard--year {
+  overflow-y: auto;
+}
+
 .dashboard__clock {
   font-size: clamp(2rem, 4vw, 3.5rem);
   font-weight: 300;
@@ -102,6 +110,328 @@ body,
   border-left: 4px solid transparent;
   border-radius: 0 0.2rem 0.2rem 0;
   cursor: pointer;
+}
+
+/* --- Header controls ----------------------------------------------------- */
+
+/*
+ * The view switcher and period stepper sit between the clock and the admin
+ * gear — the one part of the header meant to be touched. `flex: 1` on the
+ * middle group keeps it optically centred even though the clock on the left and
+ * the status on the right are never the same width.
+ */
+.dashboard__controls {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  min-width: 0;
+}
+
+/* Clear of the fixed admin hotspot in the corner. */
+.dashboard__status {
+  padding-right: 2.5rem;
+}
+
+.view-switcher .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.9rem;
+}
+
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.period-nav__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Fingertip-sized: the wall display has no mouse. */
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+
+.period-nav__label {
+  min-width: 9.5rem;
+  font-size: clamp(1rem, 1.6vw, 1.4rem);
+  font-weight: 500;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Narrow screens drop the words and keep the icons. */
+@media (max-width: 991.98px) {
+  .view-switcher__label {
+    display: none;
+  }
+
+  .period-nav__label {
+    min-width: 7rem;
+  }
+}
+
+/* --- Month view ---------------------------------------------------------- */
+
+/*
+ * Six rows of seven, filling whatever the header left over. The month is read
+ * by shape — which weeks are busy, in whose colours — so the cells are sized to
+ * the screen rather than to their contents, and nothing scrolls.
+ */
+.month-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.month-view__weekdays,
+.month-view__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.month-view__weekday {
+  padding-bottom: 0.3rem;
+  font-size: clamp(0.75rem, 1.1vw, 1rem);
+  font-weight: 600;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+.month-view__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+}
+
+.month-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-height: 0;
+  padding: 0.3rem 0.4rem;
+  overflow: hidden;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+}
+
+/* The days either side of the month: still placed, deliberately quiet. */
+.month-cell--outside {
+  background-color: transparent;
+  border-color: transparent;
+  opacity: 0.35;
+}
+
+/* Matches the week view's today column, for the same reason: an outline shifts
+ * nothing in a grid whose cells must stay the same size. */
+.month-cell--today {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+.month-cell--today .month-cell__date {
+  color: var(--bs-primary);
+  font-weight: 700;
+}
+
+.month-cell__date {
+  flex: 0 0 auto;
+  font-size: clamp(0.9rem, 1.4vw, 1.35rem);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.month-cell__dots {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 0.3rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * One entry, in its feed's colour. Too small to name the event, so it is a
+ * target rather than a label: tapping opens the same detail popup the week
+ * view's blocks do.
+ */
+.month-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  padding: 0;
+  border: 0 none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.month-dot--past {
+  opacity: 0.4;
+}
+
+.month-dot--selected {
+  opacity: 1;
+  box-shadow:
+    0 0 0 2px var(--bs-body-bg),
+    0 0 0 4px rgba(var(--bs-emphasis-color-rgb), 0.6);
+}
+
+.month-cell__more {
+  font-size: 0.72rem;
+  line-height: 0.85rem;
+  color: var(--bs-secondary-color);
+}
+
+/* --- Year view ----------------------------------------------------------- */
+
+/*
+ * Twelve months at a glance. Unlike the other two views this one may scroll: a
+ * year that does not fit is better reached by a swipe than shrunk past reading.
+ */
+.year-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.year-view__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  justify-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 1399.98px) {
+  .year-view__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 991.98px) {
+  .year-view__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .year-view__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * Capped rather than stretched to its grid column: a month grid pulled to the
+ * full width of a wall display turns into seven far-apart columns of digits,
+ * which reads as a table rather than a month.
+ */
+.mini-month {
+  width: 100%;
+  max-width: 17rem;
+  padding: 0.4rem 0.5rem 0.55rem;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+}
+
+.mini-month__title {
+  display: block;
+  width: 100%;
+  padding: 0 0 0.3rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0 none;
+  cursor: pointer;
+}
+
+.mini-month__title:hover {
+  color: var(--bs-primary);
+}
+
+.mini-month__weekdays,
+.mini-month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.mini-month__weekdays {
+  padding-bottom: 0.15rem;
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+/*
+ * A day here is about the area of a fingernail, so it carries its number and up
+ * to three feed colours — "which calendars", not "how many events". The month
+ * view answers the follow-up, which is why the whole cell steps into it.
+ */
+.mini-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  /* Fixed rather than square: twelve grids of square cells do not fit a screen,
+   * and every card must stay the same height whether its month needs five rows
+   * or six. */
+  height: 1.7rem;
+  font-size: 0.66rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0.2rem;
+  cursor: pointer;
+}
+
+.mini-day:hover {
+  background-color: var(--bs-tertiary-bg);
+}
+
+.mini-day--blank {
+  visibility: hidden;
+}
+
+/* Beyond the materialised window: the day is unknown, not empty. */
+.mini-day--unknown {
+  opacity: 0.3;
+}
+
+.mini-day--today {
+  font-weight: 700;
+  color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.mini-day__marks {
+  display: flex;
+  gap: 1px;
+  height: 4px;
+}
+
+.mini-day__mark {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.year-view__coverage {
+  flex: 0 0 auto;
+  margin: 0.75rem 0 0;
+  font-size: 0.78rem;
 }
 
 /* --- Time grid ----------------------------------------------------------- */

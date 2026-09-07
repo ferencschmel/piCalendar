@@ -28,6 +28,20 @@ export function longDateLabel(iso: string, timezone: string): string {
   });
 }
 
+/**
+ * `Saturday 12 September 2026`. The year is only worth the width when a range
+ * can cross into the next one, which the year view's coverage window does.
+ */
+export function longDateYearLabel(iso: string, timezone: string): string {
+  return new Date(iso).toLocaleDateString(LOCALE, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: timezone,
+  });
+}
+
 /** `Sat 12 Sep` — for ranges, where two long dates would not fit on a line. */
 export function shortDateLabel(iso: string, timezone: string): string {
   return new Date(iso).toLocaleDateString(LOCALE, {
@@ -35,6 +49,21 @@ export function shortDateLabel(iso: string, timezone: string): string {
     day: 'numeric',
     month: 'short',
     timeZone: timezone,
+  });
+}
+
+/**
+ * `Saturday 12 September` for a bare `YYYY-MM-DD` key.
+ *
+ * A key is already a local calendar date, so it is read back in UTC — pushing
+ * it through the display zone would shift it a day in any zone past +12.
+ */
+export function dayKeyLabel(dayKey: string): string {
+  return new Date(`${dayKey}T00:00:00Z`).toLocaleDateString(LOCALE, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
   });
 }
 

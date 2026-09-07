@@ -125,6 +125,13 @@ exactly at midnight belongs to the earlier day only.
 The response carries a `revision` string that changes only when ingest actually
 wrote something, so the client can skip a repaint on an unchanged poll.
 
+`GET /api/agenda/density` runs the same scan with five columns instead of
+seventeen and no people join, collapsing each day to one mark per feed. The year
+overview asks for 366 days at once, and answering that with full occurrences
+would serialise megabytes of descriptions nothing on screen renders. Both go
+through one shared `WHERE` builder, so a dot can never appear on a day the
+agenda would show as empty.
+
 ## Frontend
 
 React 18 + Bootstrap 5, built by Vite, served as static files by the backend.
@@ -136,6 +143,42 @@ and re-fetches immediately on wake so a screen coming out of sleep is current.
 
 The dashboard hides the navbar and puts a faint gear in the top-right corner
 instead: an admin affordance that does not eat space the calendar wants.
+Between the clock and that gear sit the view switcher and, off the week view, a
+period stepper — the one part of the header meant to be touched.
+
+### Three views
+
+The calendar takes one of three shapes, each answering a different question.
+
+| View  | Question                           | Source                |
+| ----- | ---------------------------------- | --------------------- |
+| Week  | What is happening today?           | `/api/agenda?days=8`  |
+| Month | How busy is the rest of the month? | `/api/agenda?days=42` |
+| Year  | Which weeks are busy? Which month? | `/api/agenda/density` |
+
+Only the view on screen polls: `usePolling` takes an `enabled` flag, so the two
+hooks park rather than unmount and switching back paints from the last snapshot
+instead of a spinner. Week and month share a hook because they differ only in
+the range they request — the requested day count identifies which response
+belongs to which, so a month's 42 days is never rendered through the week's
+layout while a switch is in flight.
+
+The month and year anchors are stored as _overrides_: `null` means "whatever
+period today falls in", so an unattended display rolls into the new month by
+itself rather than sticking wherever it was last left. Stepping pins a period;
+"Today" hands it back and the button hides itself again.
+
+`utils/calendarGrid.ts` does the civil-calendar arithmetic on `YYYY-MM-DD`
+keys, which are timezone-free by construction — the display zone has already
+been applied by the time a date has a key. Month grids are always six rows of
+seven, Monday first: a wall display that resized its cells as you stepped
+through the year would be far more distracting than two greyed-out trailing
+days.
+
+A month cell draws one dot per entry in its feed's colour, and each dot is a
+button that opens the same `EventDetail` popup a week-view block does. A year
+cell has roughly the area of a fingernail, so it draws at most three dots — one
+per feed, not per event — and tapping anywhere in a mini-month steps into it.
 
 ### The day grid
 
