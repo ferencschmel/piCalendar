@@ -137,6 +137,26 @@ and re-fetches immediately on wake so a screen coming out of sleep is current.
 The dashboard hides the navbar and puts a faint gear in the top-right corner
 instead: an admin affordance that does not eat space the calendar wants.
 
+### The day grid
+
+Each day is a time grid, not a list: an event's vertical position and height are
+its start and duration. Every column on screen shares one scale, computed in
+`utils/timeline.ts` from the earliest start and the latest end across all days —
+padded and snapped out to whole hours. Two consequences are deliberate:
+
+- The grid fills the viewport exactly, so nothing is ever scrolled out of reach
+  on a display with no input device.
+- The same clock time sits at the same height in every column, so the week is
+  read by scanning across rather than reading each column's labels.
+
+Events that overlap are split into lanes; a cluster of overlapping events all
+use the same lane count, so column edges line up instead of jittering per event.
+All-day events have no place on a time axis, so they sit in a band above it that
+reserves the same height in every column — otherwise one busy day would push its
+neighbours' hour lines out of step. How much detail a block shows (end time,
+location, feed) follows from its rendered height via CSS container queries, so a
+20-minute event still reads as a title rather than a clipped paragraph.
+
 ## Presence — the camera, later
 
 The plumbing exists; the detector does not.

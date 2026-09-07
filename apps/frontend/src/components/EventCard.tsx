@@ -2,8 +2,10 @@ import type { CalendarOccurrence } from '@picalendar/shared';
 
 interface Props {
   occurrence: CalendarOccurrence;
-  /** The day column this card is rendered in, for multi-day continuation hints. */
-  dayKey: string;
+  /** The occurrence started before this day — the block is cut off at the top. */
+  continuesBefore: boolean;
+  /** The occurrence runs past midnight — the block is cut off at the bottom. */
+  continuesAfter: boolean;
   timezone: string;
   /**
    * Supplied by the dashboard's ticking clock rather than read here, so every
@@ -21,52 +23,56 @@ function timeLabel(iso: string, timezone: string): string {
   });
 }
 
-function dayKeyOf(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleDateString('en-CA', { timeZone: timezone });
-}
-
-export function EventCard({ occurrence, dayKey, timezone, now }: Props): JSX.Element {
-  const startsOnThisDay = dayKeyOf(occurrence.startsAt, timezone) === dayKey;
-  // An event ending exactly at midnight belongs to the previous day, so probe
-  // one second earlier rather than the raw end timestamp.
-  const endsOnThisDay =
-    dayKeyOf(new Date(new Date(occurrence.endsAt).getTime() - 1000).toISOString(), timezone) ===
-    dayKey;
+/**
+ * One timed event, drawn as a block whose height is its duration. The block is
+ * positioned by {@link DayColumn}; everything here only has to survive being
+ * short. Container queries reveal the location and feed lines when the block is
+ * tall enough to hold them, so a 20-minute event still shows its title.
+ */
+export function EventCard({
+  occurrence,
+  continuesBefore,
+  continuesAfter,
+  timezone,
+  now,
+}: Props): JSX.Element {
   const isPast = new Date(occurrence.endsAt).getTime() < now.getTime();
 
   return (
     <article
-      className={`event-card border-start ps-2 py-2 mb-2 rounded-end ${isPast ? 'event-card--past' : ''}`}
-      style={{ borderLeftColor: occurrence.feedColor, borderLeftWidth: '4px' }}
+      className={`event-card rounded-end ${isPast ? 'event-card--past' : ''} ${
+        continuesBefore ? 'event-card--from-before' : ''
+      } ${continuesAfter ? 'event-card--into-next' : ''}`}
+      style={{ borderLeftColor: occurrence.feedColor }}
+      title={`${timeLabel(occurrence.startsAt, timezone)}–${timeLabel(
+        occurrence.endsAt,
+        timezone,
+      )} ${occurrence.summary}`}
     >
-      <div className="d-flex justify-content-between align-items-baseline gap-2">
-        <span className="event-card__time fw-semibold">
-          {occurrence.allDay ? (
-            'All day'
-          ) : startsOnThisDay ? (
-            timeLabel(occurrence.startsAt, timezone)
-          ) : (
-            <span title={`Started ${timeLabel(occurrence.startsAt, timezone)}`}>
-              <i className="bi bi-arrow-bar-right" aria-hidden="true" /> continues
-            </span>
-          )}
-        </span>
-        {!occurrence.allDay && startsOnThisDay && endsOnThisDay && (
-          <span className="event-card__time text-body-secondary small">
-            {timeLabel(occurrence.endsAt, timezone)}
-          </span>
+      <div className="event-card__time">
+        {continuesBefore ? (
+          <>
+            <i className="bi bi-arrow-bar-right" aria-hidden="true" />{' '}
+            {timeLabel(occurrence.startsAt, timezone)}
+          </>
+        ) : (
+          timeLabel(occurrence.startsAt, timezone)
         )}
+        <span className="event-card__time-end">
+          {' – '}
+          {timeLabel(occurrence.endsAt, timezone)}
+        </span>
       </div>
 
       <div className="event-card__summary">{occurrence.summary}</div>
 
       {occurrence.location && (
-        <div className="event-card__meta text-body-secondary text-truncate">
+        <div className="event-card__meta event-card__meta--optional text-truncate">
           <i className="bi bi-geo-alt" aria-hidden="true" /> {occurrence.location}
         </div>
       )}
 
-      <div className="event-card__meta text-body-secondary d-flex align-items-center gap-1">
+      <div className="event-card__meta event-card__meta--optional event-card__feed">
         <span
           className="feed-dot"
           style={{ backgroundColor: occurrence.feedColor }}
@@ -78,5 +84,30 @@ export function EventCard({ occurrence, dayKey, timezone, now }: Props): JSX.Ele
         )}
       </div>
     </article>
+  );
+}
+
+/**
+ * An all-day event. These have no place on a time grid, so they sit in a band
+ * above it that is the same height in every column — keeping the hour lines of
+ * neighbouring days aligned.
+ */
+export function AllDayChip({
+  occurrence,
+  now,
+}: {
+  occurrence: CalendarOccurrence;
+  now: Date;
+}): JSX.Element {
+  const isPast = new Date(occurrence.endsAt).getTime() < now.getTime();
+
+  return (
+    <div
+      className={`allday-chip text-truncate ${isPast ? 'event-card--past' : ''}`}
+      style={{ borderLeftColor: occurrence.feedColor }}
+      title={occurrence.summary}
+    >
+      {occurrence.summary}
+    </div>
   );
 }

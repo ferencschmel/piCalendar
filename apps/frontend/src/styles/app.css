@@ -5,7 +5,8 @@
  */
 
 :root {
-  --pical-day-min-width: 12rem;
+  /* Height of one all-day chip; the band is a whole number of these. */
+  --pical-allday-row-height: 1.4rem;
 }
 
 html,
@@ -16,8 +17,14 @@ body,
 
 /* --- Dashboard ---------------------------------------------------------- */
 
+/*
+ * The dashboard owns the viewport height itself rather than inheriting it — the
+ * layout above it is sized by `min-height`, which leaves a percentage height
+ * indefinite and would collapse the day grid to its content.
+ */
 .dashboard {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -33,47 +40,147 @@ body,
 }
 
 /*
- * One column per day, all equal width, scrolling inside themselves rather than
- * pushing the page — a wall display must never require scrolling the body.
- * Below tablet width the columns wrap into a normal vertical list.
+ * One column per day plus the hour axis, all sharing the height left over by
+ * the header. Nothing here scrolls: the day columns stretch to the viewport and
+ * events are placed by time inside them, so a wall display never hides an event
+ * below a fold nobody can reach.
  */
 .dashboard__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--pical-day-min-width), 1fr));
-  gap: 0.75rem;
+  display: flex;
+  gap: 0.6rem;
+  min-height: 0;
   overflow: hidden;
 }
 
-@media (max-width: 767.98px) {
-  .dashboard {
-    height: auto;
-    overflow: visible;
-  }
-
-  .dashboard__grid {
-    grid-template-columns: 1fr;
-    overflow: visible;
-  }
+.dashboard__grid > .day-column {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .day-column {
   min-height: 0;
+  overflow: hidden;
 }
 
-.day-column__body {
-  overflow-y: auto;
-  padding: 0.6rem;
-}
-
+/*
+ * Outline rather than a thicker border: today's column must not shift its hour
+ * lines a pixel out of step with its neighbours.
+ */
 .day-column--today {
-  border-width: 2px;
+  outline: 2px solid var(--bs-primary);
+  outline-offset: -2px;
+}
+
+.day-column__header {
+  padding: 0.3rem 0.5rem;
+}
+
+/*
+ * All-day events have no place on a time grid. The band is the same height in
+ * every column — driven by the busiest day — so the hour lines stay level.
+ */
+.day-column__allday {
+  flex: 0 0 auto;
+  height: calc(var(--pical-allday-rows, 0) * var(--pical-allday-row-height) + 0.3rem);
+  padding: 0.15rem 0.2rem;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.allday-chip {
+  height: var(--pical-allday-row-height);
+  line-height: calc(var(--pical-allday-row-height) - 0.3rem);
+  margin-bottom: 0.15rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.78rem;
+  background-color: var(--bs-tertiary-bg);
+  border-left: 4px solid transparent;
+  border-radius: 0 0.2rem 0.2rem 0;
+}
+
+/* --- Time grid ----------------------------------------------------------- */
+
+.day-column__timeline {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.timeline__hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--bs-border-color);
+  opacity: 0.55;
+}
+
+/* The current time, drawn over the events it cuts through. */
+.timeline__now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-top: 2px solid var(--bs-danger);
+  pointer-events: none;
+}
+
+.timeline__now::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -0.25rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--bs-danger);
+}
+
+/* Placed by DayColumn: `top`/`height` are the event's time, `left`/`width` its
+ * lane among the events it overlaps. */
+.timeline__slot {
+  position: absolute;
+  padding-right: 1px;
+  z-index: 2;
+  /* A five-minute event still has to be legible, so blocks never shrink below
+   * one line of text even though their top edge stays true to the clock. */
+  min-height: 1.2rem;
+  /*
+   * Each slot is a query container, so the block inside it shows the amount of
+   * detail its duration affords rather than a guess made in JavaScript.
+   */
+  container-type: size;
+}
+
+.timeline__empty {
+  position: absolute;
+  inset: 35% 0 auto 0;
+  text-align: center;
+  margin: 0;
 }
 
 /* --- Events -------------------------------------------------------------- */
 
 .event-card {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.3rem;
+  height: 100%;
+  min-height: 0;
+  padding: 0.1rem 0.3rem;
+  overflow: hidden;
   background-color: var(--bs-tertiary-bg);
-  border-left-style: solid;
+  border-left: 4px solid transparent;
+}
+
+/* Cut edges signal an event that crosses midnight. */
+.event-card--from-before {
+  border-top: 2px dashed var(--bs-border-color);
+}
+
+.event-card--into-next {
+  border-bottom: 2px dashed var(--bs-border-color);
 }
 
 .event-card--past {
@@ -81,19 +188,55 @@ body,
 }
 
 .event-card__time {
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--bs-secondary-color);
+}
+
+.event-card__time-end,
+.event-card__meta--optional {
+  display: none;
 }
 
 .event-card__summary {
-  font-size: 1rem;
-  line-height: 1.25;
+  font-size: 0.9rem;
+  line-height: 1.15;
+  overflow: hidden;
   /* Long team names are common in SportsEngine feeds; wrap rather than clip. */
   overflow-wrap: anywhere;
 }
 
 .event-card__meta {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
+  color: var(--bs-secondary-color);
+}
+
+/* Tall enough for a second line: stack the time above the title. */
+@container (min-height: 2.4rem) {
+  .event-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+}
+
+@container (min-height: 3.4rem) {
+  .event-card__time-end {
+    display: inline;
+  }
+}
+
+@container (min-height: 5rem) {
+  .event-card__meta--optional {
+    display: block;
+  }
+
+  .event-card__feed {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
 }
 
 .feed-dot {
@@ -102,6 +245,65 @@ body,
   height: 0.6rem;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* --- Hour axis ----------------------------------------------------------- */
+
+/*
+ * The axis repeats the day column's chrome invisibly instead of dropping it,
+ * which is what keeps each hour label level with the gridline it names.
+ */
+.time-axis {
+  flex: 0 0 auto;
+  width: 3.1rem;
+  --bs-card-bg: transparent;
+  border-color: transparent;
+}
+
+.time-axis .card-header,
+.time-axis .day-column__allday {
+  background-color: transparent;
+  border-color: transparent;
+}
+
+.time-axis__body {
+  overflow: visible;
+}
+
+.time-axis__label {
+  position: absolute;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--bs-secondary-color);
+}
+
+/*
+ * Narrow screens cannot show eight columns side by side, so the days become a
+ * scrolling stack. Each keeps its time grid at a fixed slice of the viewport,
+ * and the axis is dropped — the blocks carry their own times.
+ */
+@media (max-width: 767.98px) {
+  .dashboard {
+    height: auto;
+    overflow: visible;
+  }
+
+  .dashboard__grid {
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .dashboard__grid > .day-column {
+    flex: 0 0 auto;
+    height: 55vh;
+  }
+
+  .time-axis {
+    display: none;
+  }
 }
 
 /* --- Admin --------------------------------------------------------------- */

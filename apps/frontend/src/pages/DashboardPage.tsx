@@ -1,12 +1,20 @@
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import type { AgendaResponse, PresenceState } from '@picalendar/shared';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { useClock } from '../hooks/useClock.js';
 import { DayColumn } from '../components/DayColumn.js';
+import { TimeAxis } from '../components/TimeAxis.js';
+import { allDayOccurrences, computeTimeWindow } from '../utils/timeline.js';
 
 /** Today plus the next seven days. */
 const DAYS = 8;
+/**
+ * How many all-day events a column shows before the band scrolls. Every column
+ * reserves the same band height, so this caps what one busy day can steal from
+ * the time grid.
+ */
+const MAX_ALL_DAY_ROWS = 3;
 const AGENDA_POLL_MS = 60_000;
 /** Presence changes fast; the agenda it selects does not. */
 const PRESENCE_POLL_MS = 15_000;
@@ -31,6 +39,22 @@ export function DashboardPage(): JSX.Element {
   );
 
   const timezone = agenda.data?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const days = useMemo(() => agenda.data?.days ?? [], [agenda.data]);
+
+  // One scale for the whole board: the earliest start and latest end anywhere
+  // on screen set the top and bottom of every column, so a day is read by
+  // height alone and events never scroll out of view.
+  const timeWindow = useMemo(() => computeTimeWindow(days, timezone), [days, timezone]);
+
+  // The all-day band is as tall as the busiest day needs, in every column, so
+  // the hour gridlines stay level across the board.
+  const allDayRows = useMemo(
+    () =>
+      Math.min(Math.max(0, ...days.map((day) => allDayOccurrences(day).length)), MAX_ALL_DAY_ROWS),
+    [days],
+  );
+
   const staleSeconds = agenda.lastUpdatedAt
     ? Math.round((now.getTime() - agenda.lastUpdatedAt.getTime()) / 1000)
     : null;
@@ -39,7 +63,7 @@ export function DashboardPage(): JSX.Element {
   const isStale = staleSeconds !== null && staleSeconds > (AGENDA_POLL_MS / 1000) * 2;
 
   return (
-    <div className="dashboard d-flex flex-column h-100">
+    <div className="dashboard d-flex flex-column">
       <header className="dashboard__header d-flex justify-content-between align-items-center px-4 py-3">
         <div>
           <div className="dashboard__clock">
@@ -108,9 +132,20 @@ export function DashboardPage(): JSX.Element {
       )}
 
       {agenda.data && (
-        <div className="dashboard__grid flex-grow-1 px-3 pb-3">
+        <div
+          className="dashboard__grid flex-grow-1 px-3 pb-3"
+          style={{ '--pical-allday-rows': allDayRows } as CSSProperties}
+        >
+          <TimeAxis timeWindow={timeWindow} showAllDayBand={allDayRows > 0} />
           {agenda.data.days.map((day) => (
-            <DayColumn key={day.date} day={day} timezone={timezone} now={now} />
+            <DayColumn
+              key={day.date}
+              day={day}
+              timezone={timezone}
+              now={now}
+              timeWindow={timeWindow}
+              showAllDayBand={allDayRows > 0}
+            />
           ))}
         </div>
       )}

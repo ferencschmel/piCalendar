@@ -1,13 +1,28 @@
 import type { AgendaDay } from '@picalendar/shared';
-import { EventCard } from './EventCard.js';
+import { AllDayChip, EventCard } from './EventCard.js';
+import {
+  allDayOccurrences,
+  hourMarks,
+  layoutDay,
+  minutesFromDayStart,
+  percentOfWindow,
+  type TimeWindow,
+} from '../utils/timeline.js';
 
 interface Props {
   day: AgendaDay;
   timezone: string;
   now: Date;
+  /** The scale shared by every column on screen. */
+  timeWindow: TimeWindow;
+  /** Whether any day on screen has all-day events, so the band is reserved. */
+  showAllDayBand: boolean;
 }
 
-export function DayColumn({ day, timezone, now }: Props): JSX.Element {
+/** Gutter between two events that share a time slot. */
+const LANE_GAP = '2px';
+
+export function DayColumn({ day, timezone, now, timeWindow, showAllDayBand }: Props): JSX.Element {
   const date = new Date(`${day.date}T12:00:00Z`);
   const weekday = date.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
   const dayOfMonth = date.toLocaleDateString('en-GB', {
@@ -16,29 +31,79 @@ export function DayColumn({ day, timezone, now }: Props): JSX.Element {
     timeZone: 'UTC',
   });
 
+  const allDay = allDayOccurrences(day);
+  const positioned = layoutDay(day, timezone, timeWindow);
+
+  // The current-time line only makes sense on today, and only while the clock
+  // is inside the window the events themselves defined.
+  const nowMinute = day.isToday ? minutesFromDayStart(now.toISOString(), timezone, day.date) : null;
+  const showNowLine =
+    nowMinute !== null && nowMinute >= timeWindow.startMinute && nowMinute <= timeWindow.endMinute;
+
   return (
     <section
-      className={`day-column card h-100 ${day.isToday ? 'day-column--today border-primary' : ''}`}
+      className={`day-column card ${day.isToday ? 'day-column--today' : ''}`}
       aria-label={`${weekday} ${dayOfMonth}`}
     >
-      <header className="card-header d-flex justify-content-between align-items-baseline">
+      <header className="card-header day-column__header d-flex justify-content-between align-items-baseline">
         <span className="fw-bold">{day.isToday ? 'Today' : weekday}</span>
         <span className="text-body-secondary small">{dayOfMonth}</span>
       </header>
 
-      <div className="card-body day-column__body">
-        {day.occurrences.length === 0 ? (
-          <p className="text-body-secondary small fst-italic mb-0">Nothing scheduled</p>
-        ) : (
-          day.occurrences.map((occurrence) => (
-            <EventCard
-              key={`${occurrence.id}-${day.date}`}
-              occurrence={occurrence}
-              dayKey={day.date}
-              timezone={timezone}
-              now={now}
-            />
-          ))
+      {showAllDayBand && (
+        <div className="day-column__allday">
+          {allDay.map((occurrence) => (
+            <AllDayChip key={`${occurrence.id}-${day.date}`} occurrence={occurrence} now={now} />
+          ))}
+        </div>
+      )}
+
+      <div className="day-column__timeline">
+        {hourMarks(timeWindow).map((minute) => (
+          <div
+            key={minute}
+            className="timeline__hour-line"
+            style={{ top: `${percentOfWindow(minute, timeWindow)}%` }}
+            aria-hidden="true"
+          />
+        ))}
+
+        {positioned.map((item) => {
+          const top = percentOfWindow(item.startMinute, timeWindow);
+          const height = percentOfWindow(item.endMinute, timeWindow) - top;
+
+          return (
+            <div
+              key={`${item.occurrence.id}-${day.date}`}
+              className="timeline__slot"
+              style={{
+                top: `${top}%`,
+                height: `${height}%`,
+                left: `calc(${(item.lane / item.laneCount) * 100}% + ${item.lane === 0 ? '0px' : LANE_GAP})`,
+                width: `calc(${100 / item.laneCount}% - ${item.lane === 0 ? '0px' : LANE_GAP})`,
+              }}
+            >
+              <EventCard
+                occurrence={item.occurrence}
+                continuesBefore={item.continuesBefore}
+                continuesAfter={item.continuesAfter}
+                timezone={timezone}
+                now={now}
+              />
+            </div>
+          );
+        })}
+
+        {showNowLine && (
+          <div
+            className="timeline__now"
+            style={{ top: `${percentOfWindow(nowMinute, timeWindow)}%` }}
+            aria-hidden="true"
+          />
+        )}
+
+        {day.occurrences.length === 0 && (
+          <p className="timeline__empty text-body-secondary small fst-italic">Nothing scheduled</p>
         )}
       </div>
     </section>
