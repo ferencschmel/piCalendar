@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type {
   AgendaDensityResponse,
   AgendaResponse,
+  Birthday,
   Feed,
   HealthResponse,
   Person,
@@ -38,7 +39,9 @@ afterAll(async () => {
 
 beforeEach(() => {
   // Each test starts from an empty dataset; cascades clear the rest.
-  getDb().exec('DELETE FROM feed; DELETE FROM person; DELETE FROM presence_sighting;');
+  getDb().exec(
+    'DELETE FROM feed; DELETE FROM person; DELETE FROM presence_sighting; DELETE FROM birthday;',
+  );
 });
 
 describe('GET /api/health', () => {
@@ -213,6 +216,113 @@ describe('people and presence', () => {
 
     const after = await call<{ present: Array<{ displayName: string }> }>('/presence');
     expect(after.body.present.map((p) => p.displayName)).toEqual(['Alice']);
+  });
+});
+
+describe('birthdays', () => {
+  it('creates, lists, patches and deletes a birthday', async () => {
+    const created = await call<{ birthday: Birthday }>('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName: 'Ada',
+        date: { month: 3, day: 3, year: 2017 },
+        icon: 'bi-balloon',
+        color: '#123456',
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.birthday.date).toEqual({ month: 3, day: 3, year: 2017 });
+
+    const id = created.body.birthday.id;
+
+    const listed = await call<{ birthdays: Birthday[] }>('/birthdays');
+    expect(listed.body.birthdays.map((b) => b.id)).toEqual([id]);
+
+    const patched = await call<{ birthday: Birthday }>(`/birthdays/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ date: { month: 3, day: 3, year: null } }),
+    });
+    // Dropping the year must not disturb anything else on the record.
+    expect(patched.body.birthday.date).toEqual({ month: 3, day: 3, year: null });
+    expect(patched.body.birthday.icon).toBe('bi-balloon');
+
+    expect((await call(`/birthdays/${id}`, { method: 'DELETE' })).status).toBe(204);
+    expect((await call<{ birthdays: Birthday[] }>('/birthdays')).body.birthdays).toHaveLength(0);
+  });
+
+  it('applies the schema defaults server-side', async () => {
+    const { body } = await call<{ birthday: Birthday }>('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify({ displayName: 'Ada', date: { month: 3, day: 3 } }),
+    });
+    expect(body.birthday.date.year).toBeNull();
+    expect(body.birthday.icon).toBe('bi-cake2');
+    expect(body.birthday.active).toBe(true);
+  });
+
+  it('rejects an impossible date, a missing date and a non-Bootstrap icon', async () => {
+    const bad = [
+      { displayName: 'Ada', date: { month: 2, day: 30 } },
+      { displayName: 'Ada' },
+      { displayName: 'Ada', date: { month: 3, day: 3 }, icon: 'javascript:alert(1)' },
+    ];
+    for (const body of bad) {
+      expect(
+        (await call('/birthdays', { method: 'POST', body: JSON.stringify(body) })).status,
+      ).toBe(422);
+    }
+  });
+
+  it('lands on both agenda views without a feed behind it', async () => {
+    await call('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName: 'Ada',
+        date: { month: 3, day: 3, year: 2017 },
+        color: '#123456',
+      }),
+    });
+
+    const agenda = await call<AgendaResponse>('/agenda?start=2026-03-01&days=5');
+    const agendaDay = agenda.body.days.find((day) => day.date === '2026-03-03');
+    expect(agendaDay?.birthdays.map((b) => [b.displayName, b.age])).toEqual([['Ada', 9]]);
+    expect(agendaDay?.occurrences).toHaveLength(0);
+
+    // The overviews must agree with the agenda about the day.
+    const density = await call<AgendaDensityResponse>('/agenda/density?start=2026-03-01&days=5');
+    const densityDay = density.body.days.find((day) => day.date === '2026-03-03');
+    expect(densityDay?.birthdays.map((b) => b.displayName)).toEqual(['Ada']);
+  });
+
+  it('is drawn whatever presence narrows the agenda to', async () => {
+    const person = await call<{ person: Person }>('/people', {
+      method: 'POST',
+      body: JSON.stringify({ displayName: 'Bob', color: '#654321' }),
+    });
+    await call('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify({ displayName: 'Nan', date: { month: 3, day: 3 } }),
+    });
+    await call('/presence/sightings', {
+      method: 'POST',
+      body: JSON.stringify({ personId: person.body.person.id, confidence: 0.99 }),
+    });
+
+    const agenda = await call<AgendaResponse>('/agenda?start=2026-03-01&days=5');
+    const day = agenda.body.days.find((d) => d.date === '2026-03-03');
+    expect(day?.birthdays.map((b) => b.displayName)).toEqual(['Nan']);
+  });
+
+  it('hides an inactive birthday from the calendar but keeps the record', async () => {
+    const created = await call<{ birthday: Birthday }>('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify({ displayName: 'Ada', date: { month: 3, day: 3 }, active: false }),
+    });
+    expect(created.body.birthday.active).toBe(false);
+
+    const agenda = await call<AgendaResponse>('/agenda?start=2026-03-01&days=5');
+    expect(agenda.body.days.find((d) => d.date === '2026-03-03')?.birthdays).toEqual([]);
+    expect((await call<{ birthdays: Birthday[] }>('/birthdays')).body.birthdays).toHaveLength(1);
   });
 });
 

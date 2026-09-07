@@ -6,11 +6,11 @@ import { TimeAxis } from './TimeAxis.js';
 import { allDayOccurrences, computeTimeWindow } from '../utils/timeline.js';
 
 /**
- * How many all-day events a column shows before the band scrolls. Every column
- * reserves the same band height, so this caps what one busy day can steal from
- * the time grid.
+ * How many rows the band above the time grid shows before it scrolls. Every
+ * column reserves the same band height, so this caps what one busy day can
+ * steal from the time grid.
  */
-const MAX_ALL_DAY_ROWS = 3;
+const MAX_ALL_DAY_ROWS = 4;
 
 interface Props {
   days: AgendaDay[];
@@ -32,11 +32,15 @@ export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props):
   // height alone and events never scroll out of view.
   const timeWindow = useMemo(() => computeTimeWindow(days, timezone), [days, timezone]);
 
-  // The all-day band is as tall as the busiest day needs, in every column, so
-  // the hour gridlines stay level across the board.
+  // The band is as tall as the busiest day needs, in every column, so the hour
+  // gridlines stay level across the board. Birthdays share it with the all-day
+  // events and are counted here for the same reason.
   const allDayRows = useMemo(
     () =>
-      Math.min(Math.max(0, ...days.map((day) => allDayOccurrences(day).length)), MAX_ALL_DAY_ROWS),
+      Math.min(
+        Math.max(0, ...days.map((day) => allDayOccurrences(day).length + day.birthdays.length)),
+        MAX_ALL_DAY_ROWS,
+      ),
     [days],
   );
 

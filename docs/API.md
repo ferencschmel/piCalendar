@@ -87,17 +87,43 @@ exists — every enabled calendar is shown.
           "isRecurring": false,
           "people": []
         }
-      ]
+      ],
+      "birthdays": []
     }
   ]
 }
 ```
 
-`revision` changes only when ingest actually wrote something. Compare it across
+`revision` changes when ingest wrote something, and when a person record was
+added, edited or removed — birthdays are not ingested, so a client that skips
+repaints on an unchanged revision would otherwise miss them. Compare it across
 polls to decide whether a re-render is warranted.
 
 A multi-day event appears under **every** day it covers. One ending exactly at
 midnight belongs to the earlier day only.
+
+### `birthdays`
+
+Whose birthday falls on the day. These come from the `birthday` table rather
+than from any feed, and are never filtered by `personId` or presence — a
+birthday belongs to no calendar, and the people it names are usually not
+household members at all.
+
+```json
+{
+  "birthdayId": "b2…",
+  "displayName": "Ada",
+  "color": "#d63384",
+  "icon": "bi-balloon",
+  "date": "2026-09-09",
+  "age": 9,
+  "observed": false
+}
+```
+
+`age` is `null` when no birth year is on file, and on the birth day itself.
+`observed` is `true` when a 29 February birthday has been moved to the 28th
+because the year has no 29th.
 
 ---
 
@@ -125,7 +151,8 @@ Takes the same query parameters, except `days`, which accepts **1–366**
         { "feedId": "f9…", "feedName": "Swim Club", "color": "#20c997", "count": 2 },
         { "feedId": "3a…", "feedName": "U12 Football", "color": "#e8590c", "count": 1 }
       ],
-      "total": 3
+      "total": 3,
+      "birthdays": []
     }
   ]
 }
@@ -142,7 +169,10 @@ has been expanded there yet, **not** because the calendar is empty; the year
 view draws those days faint rather than claiming they are free.
 
 Days are bucketed exactly as `/api/agenda` buckets them, multi-day events
-included.
+included. `birthdays` carries the same objects the agenda does, and unlike
+`marks` it is populated **outside** the coverage window too: a birthday is
+computed from the person record, so it is known for any date the grid can ask
+about.
 
 ---
 
@@ -208,6 +238,9 @@ Dry-run a URL before saving it. Fetches and parses, stores nothing.
 
 ## People
 
+Household members: who a feed belongs to, and who the camera will one day
+recognise. Birthdays are **not** here — see below.
+
 `GET /api/people` → `{ "people": [Person, …] }`
 
 `POST /api/people` — **admin** — `{ displayName, email?, color?, active? }` → **201**
@@ -215,6 +248,44 @@ Dry-run a URL before saving it. Fetches and parses, stores nothing.
 `PATCH /api/people/:id` — **admin** — any subset
 
 `DELETE /api/people/:id` — **admin** → **204**. Feeds survive; the link is dropped.
+
+---
+
+## Birthdays
+
+A separate set from People, deliberately. The names here are grandparents,
+cousins and school friends — nobody whose calendar is subscribed to and nobody
+the camera will ever see — so they carry only what a birthday needs.
+
+`GET /api/birthdays` → `{ "birthdays": [Birthday, …] }`, in calendar order.
+
+`POST /api/birthdays` — **admin** — `{ displayName, date, icon?, color?, active? }` → **201**
+
+`PATCH /api/birthdays/:id` — **admin** — any subset
+
+`DELETE /api/birthdays/:id` — **admin** → **204**
+
+```json
+{
+  "id": "b2…",
+  "displayName": "Ada",
+  "date": { "month": 9, "day": 9, "year": 2017 },
+  "icon": "bi-balloon",
+  "color": "#d63384",
+  "active": true,
+  "createdAt": "2026-09-01T10:00:00.000Z",
+  "updatedAt": "2026-09-01T10:00:00.000Z"
+}
+```
+
+`date` is a civil date, not an instant, so it is sent as its parts. `month` and
+`day` are required; `year` may be `null` or omitted, which shows the day on the
+calendar without an age. A patch omitting `date` leaves it alone — there is no
+way to clear it, since a birthday without a date is not a record.
+
+`icon` is a Bootstrap Icons class name matching `bi-[a-z0-9-]+` (default
+`bi-cake2`); `color` tints the entry on the calendar (default `#d63384`).
+`active: false` keeps the record but takes it off the calendar.
 
 ---
 

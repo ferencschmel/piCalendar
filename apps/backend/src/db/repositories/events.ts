@@ -1,4 +1,9 @@
-import type { AgendaDay, AgendaDensityDay, CalendarOccurrence } from '@picalendar/shared';
+import type {
+  AgendaDay,
+  AgendaDensityDay,
+  BirthdayCelebration,
+  CalendarOccurrence,
+} from '@picalendar/shared';
 import type { Db } from '../index.js';
 import type { NormalizedEvent } from '../../ingest/types.js';
 import { contentHash, newId, occurrenceId } from '../../util/ids.js';
@@ -338,12 +343,16 @@ function spreadAcrossDays<T extends Spanning>(
   return buckets;
 }
 
+/** No birthdays, for callers that only care about ingested events. */
+const NO_BIRTHDAYS: ReadonlyMap<string, BirthdayCelebration[]> = new Map();
+
 /** Bucket occurrences into the dashboard's day columns. */
 export function groupByDay(
   occurrences: CalendarOccurrence[],
   dayKeys: string[],
   timezone: string,
   todayKey: string,
+  birthdays: ReadonlyMap<string, BirthdayCelebration[]> = NO_BIRTHDAYS,
 ): AgendaDay[] {
   const buckets = spreadAcrossDays(occurrences, dayKeys, timezone);
 
@@ -351,6 +360,7 @@ export function groupByDay(
     date,
     isToday: date === todayKey,
     occurrences: buckets.get(date) ?? [],
+    birthdays: birthdays.get(date) ?? [],
   }));
 }
 
@@ -367,6 +377,7 @@ export function groupDensityByDay(
   dayKeys: string[],
   timezone: string,
   todayKey: string,
+  birthdays: ReadonlyMap<string, BirthdayCelebration[]> = NO_BIRTHDAYS,
 ): AgendaDensityDay[] {
   const buckets = spreadAcrossDays(rows, dayKeys, timezone);
 
@@ -393,6 +404,7 @@ export function groupDensityByDay(
       isToday: date === todayKey,
       marks: [...marks.values()],
       total: dayRows.length,
+      birthdays: birthdays.get(date) ?? [],
     };
   });
 }

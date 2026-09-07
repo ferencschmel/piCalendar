@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import type { Feed, HealthResponse, Person } from '@picalendar/shared';
+import type { Birthday, Feed, HealthResponse, Person } from '@picalendar/shared';
 import { api, ApiError, getAdminToken, setAdminToken } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { FeedForm } from '../components/FeedForm.js';
+import { BirthdaysPanel } from '../components/BirthdaysPanel.js';
 import { PeoplePanel } from '../components/PeoplePanel.js';
 
 interface AdminData {
   feeds: Feed[];
   people: Person[];
+  birthdays: Birthday[];
   health: HealthResponse;
 }
 
@@ -24,16 +26,18 @@ export function AdminPage(): JSX.Element {
   // The same hook the dashboard uses: it keeps the last good data on screen
   // while a refresh runs, and `refresh()` re-pulls after every mutation.
   const admin = usePolling<AdminData>(async () => {
-    const [feeds, people, health] = await Promise.all([
+    const [feeds, people, birthdays, health] = await Promise.all([
       api.listFeeds(),
       api.listPeople(),
+      api.listBirthdays(),
       api.health(),
     ]);
-    return { feeds, people, health };
+    return { feeds, people, birthdays, health };
   }, ADMIN_POLL_MS);
 
   const feeds = admin.data?.feeds ?? [];
   const people = admin.data?.people ?? [];
+  const birthdays = admin.data?.birthdays ?? [];
   const health = admin.data?.health ?? null;
   const load = admin.refresh;
   const error =
@@ -234,6 +238,8 @@ export function AdminPage(): JSX.Element {
 
       <div className="col-lg-4 d-flex flex-column gap-4">
         <PeoplePanel people={people} onChanged={load} />
+
+        <BirthdaysPanel birthdays={birthdays} onChanged={load} />
 
         <div className="card">
           <div className="card-header">System</div>

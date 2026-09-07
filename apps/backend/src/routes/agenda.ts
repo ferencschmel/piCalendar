@@ -13,8 +13,10 @@ import {
   queryOccurrences,
   queryOccurrenceDensity,
 } from '../db/repositories/events.js';
+import { birthdayRevision, listActiveBirthdays } from '../db/repositories/birthdays.js';
 import { getAgendaRevision } from '../db/repositories/settings.js';
 import { getPresenceState } from '../db/repositories/presence.js';
+import { celebrationsByDay } from '../util/birthdays.js';
 import { dayKeyRange, dayStartEpoch, nowEpoch, toDayKey } from '../util/time.js';
 
 export const agendaRouter: Router = Router();
@@ -60,13 +62,20 @@ agendaRouter.get('/', (req, res) => {
     personIds,
   });
 
+  // Not narrowed by `personIds`: presence selects whose *calendars* are worth
+  // the wall's attention, and birthdays are not a person's calendar. Grandma is
+  // never in the room and her birthday still belongs on the display.
+  const birthdays = celebrationsByDay(listActiveBirthdays(db), dayKeys);
+
   const response: AgendaResponse = {
     generatedAt: new Date().toISOString(),
     rangeStart: new Date(rangeStart * 1000).toISOString(),
     rangeEnd: new Date(rangeEnd * 1000).toISOString(),
     timezone,
-    days: groupByDay(occurrences, dayKeys, timezone, toDayKey(nowEpoch(), timezone)),
-    revision: `${getAgendaRevision(db)}:${startKey}:${query.days}:${personIds?.join(',') ?? 'all'}`,
+    days: groupByDay(occurrences, dayKeys, timezone, toDayKey(nowEpoch(), timezone), birthdays),
+    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${startKey}:${query.days}:${
+      personIds?.join(',') ?? 'all'
+    }`,
   };
 
   // The dashboard polls this every minute; a short cache keeps a reloading
@@ -102,6 +111,8 @@ agendaRouter.get('/density', (req, res) => {
     personIds,
   });
 
+  const birthdays = celebrationsByDay(listActiveBirthdays(db), dayKeys);
+
   // Ingest only expands recurrences inside a rolling window, so a year grid
   // runs off the end of what has been materialised. Reporting the window lets
   // the overview distinguish "nothing on" from "nothing known yet".
@@ -113,8 +124,10 @@ agendaRouter.get('/density', (req, res) => {
     timezone,
     coverageStart: new Date(coverageStart * 1000).toISOString(),
     coverageEnd: new Date(coverageEnd * 1000).toISOString(),
-    days: groupDensityByDay(rows, dayKeys, timezone, toDayKey(now, timezone)),
-    revision: `${getAgendaRevision(db)}:${startKey}:${query.days}:${personIds?.join(',') ?? 'all'}`,
+    days: groupDensityByDay(rows, dayKeys, timezone, toDayKey(now, timezone), birthdays),
+    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${startKey}:${query.days}:${
+      personIds?.join(',') ?? 'all'
+    }`,
   };
 
   res.set('Cache-Control', 'no-cache');

@@ -48,7 +48,7 @@ piCalendar/
 │   └── test/
 ├── apps/frontend/
 │   ├── src/pages/            # DashboardPage, AdminPage
-│   ├── src/components/       # DayColumn, EventCard, FeedForm, PeoplePanel
+│   ├── src/components/       # DayColumn, EventCard, FeedForm, BirthdaysPanel
 │   └── src/hooks/            # usePolling, useClock
 ├── deploy/                   # systemd unit, install script, kiosk notes
 ├── docs/
@@ -122,8 +122,9 @@ Results are bucketed into local day columns in JavaScript, where the display
 timezone lives. A multi-day event appears under every day it covers; one ending
 exactly at midnight belongs to the earlier day only.
 
-The response carries a `revision` string that changes only when ingest actually
-wrote something, so the client can skip a repaint on an unchanged poll.
+The response carries a `revision` string that changes only when something the
+dashboard renders actually changed — ingest writing, or a person record being
+edited — so the client can skip a repaint on an unchanged poll.
 
 `GET /api/agenda/density` runs the same scan with five columns instead of
 seventeen and no people join, collapsing each day to one mark per feed. The year
@@ -131,6 +132,39 @@ overview asks for 366 days at once, and answering that with full occurrences
 would serialise megabytes of descriptions nothing on screen renders. Both go
 through one shared `WHERE` builder, so a dot can never appear on a day the
 agenda would show as empty.
+
+### Birthdays are computed, not stored
+
+Both endpoints also return a `birthdays` array per day, and it is the one thing
+on the calendar that no feed provides. Birthdays live in their own `birthday`
+table, and the days they fall on are derived per request in `util/birthdays.ts`.
+
+The table is separate from `person` on purpose. A `person` is a household member
+that feeds are attributed to and that the camera will one day recognise; the
+grandparents, cousins and school friends whose birthdays a family calendar
+carries are none of those things, and `person` rows for them would put them in
+the presence set and the feed-attribution picker for no reason. Splitting them
+also lets `birth_month` / `birth_day` be `NOT NULL`, since a birthday row
+without a date is nothing at all.
+
+Three more properties fall out of computing rather than storing, all wanted:
+
+- **A steady-state sync still writes nothing.** Materialising a yearly recurrence
+  into `event_occurrence` would mean rewriting those rows on every window roll,
+  for three integers per person.
+- **Birthdays are known outside the occurrence window.** The year view draws days
+  past `coverageEnd` as unknown because no feed has been expanded there — but a
+  birthday in December is computable in January, and is drawn at full strength
+  while the feed marks around it stay faint.
+- **A birthday is a civil date, not an instant.** Storing it as unix seconds
+  would be the one place in the schema where that is wrong: there is no timezone
+  at which someone stops having been born on the 3rd of March. Matching a birth
+  month and day against a `YYYY-MM-DD` day key needs no zone conversion at all.
+
+Both endpoints call the same bucketing function, for the same reason the two
+queries share a `WHERE` builder. A 29 February birthday is observed on the 28th
+in a common year and says so, and birthdays are deliberately **not** narrowed by
+presence: whose day it is does not depend on who is in the room.
 
 ## Frontend
 

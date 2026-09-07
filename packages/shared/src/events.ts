@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BirthdayCelebration } from './birthdays.js';
 
 /**
  * A single materialised occurrence of an event — a recurring event yields one
@@ -32,6 +33,13 @@ export interface AgendaDay {
   date: string;
   isToday: boolean;
   occurrences: CalendarOccurrence[];
+  /**
+   * Whose birthday it is. Kept apart from `occurrences` rather than faked into
+   * an all-day event: a birthday belongs to no feed, has no end time and
+   * nothing to open a detail popup for, and the views give it a row of its own
+   * above everything else.
+   */
+  birthdays: BirthdayCelebration[];
 }
 
 export interface AgendaResponse {
@@ -77,6 +85,12 @@ export interface AgendaDensityDay {
   marks: Array<{ feedId: string; feedName: string; color: string; count: number }>;
   /** Occurrences that day across every feed. */
   total: number;
+  /**
+   * Birthdays are derived from the `birthday` records rather than from ingested
+   * occurrences, so they are known for the whole year — including the stretch
+   * beyond `coverageEnd` where the marks above are genuinely unknown.
+   */
+  birthdays: BirthdayCelebration[];
 }
 
 export interface AgendaDensityResponse {

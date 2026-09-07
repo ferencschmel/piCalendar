@@ -119,6 +119,15 @@ midnight belongs to the earlier day only. One shared bucketing function enforces
 this for both the agenda and the density endpoints — keep it that way, or a dot
 will appear on a day the agenda shows as empty.
 
+**Birthdays are the exception to all of the above.** They live on `person`
+(`birth_month` / `birth_day` / `birth_year`, the year separately nullable) as a
+_civil_ date, not unix seconds — the one place storing an instant would be wrong.
+`util/birthdays.ts` derives which days they fall on per request, so nothing is
+materialised, a steady-state sync still writes nothing, and they are known
+outside the occurrence window where feed marks are not. Both agenda endpoints
+call that one function, for the same reason the two queries share a `WHERE`
+builder.
+
 ## Frontend
 
 `usePolling` is the entire data layer — no query library. It keeps the last good
@@ -167,3 +176,6 @@ affordance that does not eat space the calendar wants.
 - Presence is plumbed but has no detector. `person`, `feed_person` and the
   presence API all exist, and `/api/agenda` already narrows to whoever is
   detected; with nobody detected it shows every calendar. Keep that fallback.
+- Birthdays are deliberately **not** narrowed by presence or `personId`. They
+  are a separate table from `person` for the same reason: the two are different
+  sets of people, and a birthday belongs to no calendar.

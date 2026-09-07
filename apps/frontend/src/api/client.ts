@@ -2,6 +2,9 @@ import type {
   AgendaDensityResponse,
   AgendaResponse,
   ApiErrorBody,
+  Birthday,
+  BirthdayInputPayload,
+  BirthdayUpdatePayload,
   Feed,
   FeedInput,
   FeedUpdate,
@@ -91,6 +94,19 @@ export const api = {
     request<AgendaDensityResponse>(`/agenda/density${agendaQuery(params)}`),
 
   health: () => request<HealthResponse>('/health'),
+
+  listBirthdays: () => request<{ birthdays: Birthday[] }>('/birthdays').then((r) => r.birthdays),
+  createBirthday: (input: BirthdayInputPayload) =>
+    request<{ birthday: Birthday }>('/birthdays', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => r.birthday),
+  updateBirthday: (id: string, patch: BirthdayUpdatePayload) =>
+    request<{ birthday: Birthday }>(`/birthdays/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }).then((r) => r.birthday),
+  deleteBirthday: (id: string) => request<void>(`/birthdays/${id}`, { method: 'DELETE' }),
 
   listFeeds: () => request<{ feeds: Feed[] }>('/feeds').then((r) => r.feeds),
   getFeed: (id: string) => request<{ feed: Feed; recentRuns: SyncRun[] }>(`/feeds/${id}`),

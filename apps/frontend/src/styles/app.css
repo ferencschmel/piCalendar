@@ -112,6 +112,56 @@ body,
   cursor: pointer;
 }
 
+/*
+ * A birthday, in the person's own colour. It shares the all-day band's row
+ * height so the band's reserved space stays a whole number of rows whatever mix
+ * of chips a day holds.
+ *
+ * Not a button: there is no detail popup behind it, so it must not invite a tap
+ * that does nothing.
+ */
+.birthday-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: var(--pical-allday-row-height);
+  margin-bottom: 0.15rem;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.78rem;
+  background-color: var(--bs-tertiary-bg);
+  border-left: 4px solid transparent;
+  border-radius: 0 0.2rem 0.2rem 0;
+}
+
+.birthday-chip__icon {
+  flex: 0 0 auto;
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.birthday-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The age carries the person's colour on a neutral ground rather than the other
+ * way round: a pale pastel picked in the admin page still has to be readable
+ * from across the room.
+ */
+.birthday-chip__age {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0 0.3rem;
+  font-size: 0.85em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-emphasis-color);
+  background-color: var(--bs-secondary-bg);
+  border-radius: 0.6rem;
+}
+
 /* --- Header controls ----------------------------------------------------- */
 
 /*
@@ -249,6 +299,26 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Between the date and the dots. A birthday gets a name where an event only
+ * gets a mark, because at a month's scale "whose day is it" is the question
+ * worth the width.
+ */
+.month-cell__birthdays {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.month-cell__birthdays .birthday-chip {
+  height: auto;
+  margin-bottom: 0;
+  padding: 0.05rem 0.3rem;
+  font-size: clamp(0.6rem, 0.85vw, 0.8rem);
+}
+
 .month-cell__dots {
   display: flex;
   flex-wrap: wrap;
@@ -287,6 +357,17 @@ body,
   font-size: 0.72rem;
   line-height: 0.85rem;
   color: var(--bs-secondary-color);
+}
+
+/*
+ * The admin icon picker. Auto-fill rather than a fixed column count: the panel
+ * sits in a sidebar that narrows with the viewport, and a picker that wraps is
+ * better than one that overflows.
+ */
+.person-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.2rem, 1fr));
+  gap: 0.25rem;
 }
 
 /* --- Year view ----------------------------------------------------------- */
@@ -378,6 +459,7 @@ body,
  * view answers the follow-up, which is why the whole cell steps into it.
  */
 .mini-day {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -405,9 +487,28 @@ body,
   visibility: hidden;
 }
 
-/* Beyond the materialised window: the day is unknown, not empty. */
-.mini-day--unknown {
+/*
+ * Beyond the materialised window: the day is unknown, not empty. Dimmed on the
+ * children rather than the cell, because a birthday is computed from the person
+ * record and *is* known out here — fading it would say the opposite.
+ */
+.mini-day--unknown .mini-day__date,
+.mini-day--unknown .mini-day__marks {
   opacity: 0.3;
+}
+
+/*
+ * Cornered rather than in the marks row, which is four pixels tall and already
+ * spoken for. Non-interactive, so it never swallows the tap that steps into the
+ * month.
+ */
+.mini-day__birthday {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  font-size: 0.55rem;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .mini-day--today {

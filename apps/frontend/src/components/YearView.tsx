@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { AgendaDensityDay } from '@picalendar/shared';
+import { birthdayLabel, type AgendaDensityDay } from '@picalendar/shared';
 import { dateKey, dayKeyLabel, longDateYearLabel } from '../utils/datetime.js';
 import {
   dayOfMonth,
@@ -34,12 +34,17 @@ const MAX_MARKS = 3;
 /** Empty state for a day the response has nothing to say about. */
 const NO_MARKS: AgendaDensityDay['marks'] = [];
 
-function markTitle(dayKey: string, day: AgendaDensityDay | undefined): string {
+function markTitle(dayKey: string, day: AgendaDensityDay | undefined, known: boolean): string {
   const date = dayKeyLabel(dayKey);
-  if (!day || day.total === 0) return `${date} — nothing scheduled`;
+  // Birthdays are derived from the person records, so they are worth naming
+  // even on a day whose feed marks have not been materialised yet.
+  const parts = day?.birthdays.map(birthdayLabel) ?? [];
 
-  const feeds = day.marks.map((mark) => `${mark.feedName} (${mark.count})`).join(', ');
-  return `${date} — ${feeds}`;
+  if (!known) parts.push('events not loaded yet');
+  else if (!day || day.total === 0) parts.push('nothing scheduled');
+  else parts.push(day.marks.map((mark) => `${mark.feedName} (${mark.count})`).join(', '));
+
+  return `${date} — ${parts.join(' · ')}`;
 }
 
 function MiniMonth({
@@ -85,6 +90,9 @@ function MiniMonth({
           // ISO keys sort as dates do, so the coverage test is a string compare.
           const known = dayKey >= coverageStartKey && dayKey <= coverageEndKey;
           const marks = day?.marks.slice(0, MAX_MARKS) ?? NO_MARKS;
+          // Only the first fits in the corner; a day with two birthdays is
+          // rare and the tooltip names them all.
+          const celebration = day?.birthdays[0];
 
           return (
             <button
@@ -93,9 +101,19 @@ function MiniMonth({
               className={`mini-day ${dayKey === todayKey ? 'mini-day--today' : ''} ${
                 known ? '' : 'mini-day--unknown'
               }`}
-              title={known ? markTitle(dayKey, day) : `${dayKeyLabel(dayKey)} — not loaded yet`}
+              title={markTitle(dayKey, day, known)}
               onClick={onPick}
             >
+              {/* Tucked into the corner rather than given a row of its own:
+                  the cell is a fingernail and the feed marks below still have
+                  to answer how busy the day is. */}
+              {celebration && (
+                <i
+                  className={`bi ${celebration.icon} mini-day__birthday`}
+                  style={{ color: celebration.color }}
+                  aria-hidden="true"
+                />
+              )}
               <span className="mini-day__date">{dayOfMonth(dayKey)}</span>
               <span className="mini-day__marks" aria-hidden="true">
                 {marks.map((mark) => (

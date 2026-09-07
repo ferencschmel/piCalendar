@@ -1,4 +1,5 @@
 import type { AgendaDay } from '@picalendar/shared';
+import { BirthdayChip } from './BirthdayChip.js';
 import { AllDayChip, EventCard, type SelectOccurrence } from './EventCard.js';
 import {
   allDayOccurrences,
@@ -63,6 +64,12 @@ export function DayColumn({
 
       {showAllDayBand && (
         <div className="day-column__allday">
+          {/* First in the band, so a birthday is the one thing in the column
+              that cannot be scrolled out of sight on a busy day. */}
+          {day.birthdays.map((celebration) => (
+            <BirthdayChip key={celebration.birthdayId} celebration={celebration} />
+          ))}
+
           {allDay.map((occurrence) => {
             const key = `${occurrence.id}-${day.date}`;
             return (

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import type { AgendaDay, CalendarOccurrence } from '@picalendar/shared';
+import type { AgendaDay, BirthdayCelebration, CalendarOccurrence } from '@picalendar/shared';
+import { BirthdayChip } from './BirthdayChip.js';
 import type { SelectOccurrence } from './EventCard.js';
 import { timeLabel } from '../utils/datetime.js';
 import {
@@ -30,6 +31,9 @@ interface Props {
  */
 const MAX_DOTS = 10;
 
+/** Stable empty array, so a cell without a response does not remount its row. */
+const NO_BIRTHDAYS: BirthdayCelebration[] = [];
+
 /** `09:30 · Swim practice`, or `All day · Half term`. */
 function dotTitle(occurrence: CalendarOccurrence, timezone: string): string {
   const when = occurrence.allDay ? 'All day' : timeLabel(occurrence.startsAt, timezone);
@@ -40,6 +44,7 @@ function MonthCell({
   dayKey,
   anchor,
   occurrences,
+  birthdays,
   isToday,
   timezone,
   now,
@@ -49,6 +54,7 @@ function MonthCell({
   dayKey: string;
   anchor: MonthAnchor;
   occurrences: CalendarOccurrence[];
+  birthdays: BirthdayCelebration[];
   isToday: boolean;
   timezone: string;
   now: Date;
@@ -66,6 +72,16 @@ function MonthCell({
       }`}
     >
       <div className="month-cell__date">{dayOfMonth(dayKey)}</div>
+
+      {/* Above the dots and named in full: whose day it is deserves more of a
+          cell than the anonymous mark an event gets at this scale. */}
+      {birthdays.length > 0 && (
+        <div className="month-cell__birthdays">
+          {birthdays.map((celebration) => (
+            <BirthdayChip key={celebration.birthdayId} celebration={celebration} />
+          ))}
+        </div>
+      )}
 
       <div className="month-cell__dots">
         {shown.map((occurrence) => {
@@ -147,6 +163,7 @@ export function MonthView({
               dayKey={dayKey}
               anchor={anchor}
               occurrences={day?.occurrences ?? []}
+              birthdays={day?.birthdays ?? NO_BIRTHDAYS}
               isToday={dayKey === todayKey}
               timezone={timezone}
               now={now}
