@@ -1,5 +1,5 @@
 import type { AgendaDay } from '@picalendar/shared';
-import { AllDayChip, EventCard } from './EventCard.js';
+import { AllDayChip, EventCard, type SelectOccurrence } from './EventCard.js';
 import {
   allDayOccurrences,
   hourMarks,
@@ -17,12 +17,23 @@ interface Props {
   timeWindow: TimeWindow;
   /** Whether any day on screen has all-day events, so the band is reserved. */
   showAllDayBand: boolean;
+  /** Key of the block whose detail popup is open, if it is one of this day's. */
+  selectedKey: string | null;
+  onSelect: SelectOccurrence;
 }
 
 /** Gutter between two events that share a time slot. */
 const LANE_GAP = '2px';
 
-export function DayColumn({ day, timezone, now, timeWindow, showAllDayBand }: Props): JSX.Element {
+export function DayColumn({
+  day,
+  timezone,
+  now,
+  timeWindow,
+  showAllDayBand,
+  selectedKey,
+  onSelect,
+}: Props): JSX.Element {
   const date = new Date(`${day.date}T12:00:00Z`);
   const weekday = date.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
   const dayOfMonth = date.toLocaleDateString('en-GB', {
@@ -52,9 +63,19 @@ export function DayColumn({ day, timezone, now, timeWindow, showAllDayBand }: Pr
 
       {showAllDayBand && (
         <div className="day-column__allday">
-          {allDay.map((occurrence) => (
-            <AllDayChip key={`${occurrence.id}-${day.date}`} occurrence={occurrence} now={now} />
-          ))}
+          {allDay.map((occurrence) => {
+            const key = `${occurrence.id}-${day.date}`;
+            return (
+              <AllDayChip
+                key={key}
+                selectionKey={key}
+                isSelected={selectedKey === key}
+                onSelect={onSelect}
+                occurrence={occurrence}
+                now={now}
+              />
+            );
+          })}
         </div>
       )}
 
@@ -71,10 +92,11 @@ export function DayColumn({ day, timezone, now, timeWindow, showAllDayBand }: Pr
         {positioned.map((item) => {
           const top = percentOfWindow(item.startMinute, timeWindow);
           const height = percentOfWindow(item.endMinute, timeWindow) - top;
+          const key = `${item.occurrence.id}-${day.date}`;
 
           return (
             <div
-              key={`${item.occurrence.id}-${day.date}`}
+              key={key}
               className="timeline__slot"
               style={{
                 top: `${top}%`,
@@ -85,6 +107,9 @@ export function DayColumn({ day, timezone, now, timeWindow, showAllDayBand }: Pr
             >
               <EventCard
                 occurrence={item.occurrence}
+                selectionKey={key}
+                isSelected={selectedKey === key}
+                onSelect={onSelect}
                 continuesBefore={item.continuesBefore}
                 continuesAfter={item.continuesAfter}
                 timezone={timezone}

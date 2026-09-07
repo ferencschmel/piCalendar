@@ -1,9 +1,11 @@
-import { useMemo, type CSSProperties } from 'react';
-import type { AgendaResponse, PresenceState } from '@picalendar/shared';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import type { AgendaResponse, CalendarOccurrence, PresenceState } from '@picalendar/shared';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { useClock } from '../hooks/useClock.js';
 import { DayColumn } from '../components/DayColumn.js';
+import { EventDetail } from '../components/EventDetail.js';
+import type { SelectOccurrence } from '../components/EventCard.js';
 import { TimeAxis } from '../components/TimeAxis.js';
 import { allDayOccurrences, computeTimeWindow } from '../utils/timeline.js';
 
@@ -19,8 +21,22 @@ const AGENDA_POLL_MS = 60_000;
 /** Presence changes fast; the agenda it selects does not. */
 const PRESENCE_POLL_MS = 15_000;
 
+/** The event whose details are on screen, and the block to pin them beside. */
+interface Selection {
+  key: string;
+  occurrence: CalendarOccurrence;
+  anchor: HTMLElement;
+}
+
 export function DashboardPage(): JSX.Element {
   const now = useClock();
+
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const select = useCallback<SelectOccurrence>(
+    (key, occurrence, anchor) => setSelection({ key, occurrence, anchor }),
+    [],
+  );
+  const clearSelection = useCallback(() => setSelection(null), []);
 
   const presence = usePolling<PresenceState>(() => api.presence(), PRESENCE_POLL_MS);
 
@@ -145,9 +161,23 @@ export function DashboardPage(): JSX.Element {
               now={now}
               timeWindow={timeWindow}
               showAllDayBand={allDayRows > 0}
+              selectedKey={selection?.key ?? null}
+              onSelect={select}
             />
           ))}
         </div>
+      )}
+
+      {selection && (
+        <EventDetail
+          // Remounted per selection, so the popup's placement and its
+          // auto-close countdown both start fresh for each event.
+          key={selection.key}
+          occurrence={selection.occurrence}
+          anchor={selection.anchor}
+          timezone={timezone}
+          onClose={clearSelection}
+        />
       )}
     </div>
   );

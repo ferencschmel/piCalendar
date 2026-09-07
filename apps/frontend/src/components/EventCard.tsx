@@ -1,7 +1,20 @@
 import type { CalendarOccurrence } from '@picalendar/shared';
+import { timeLabel } from '../utils/datetime.js';
+
+/** Opens the detail popup, handing it the element to be placed beside. */
+export type SelectOccurrence = (
+  key: string,
+  occurrence: CalendarOccurrence,
+  anchor: HTMLElement,
+) => void;
 
 interface Props {
   occurrence: CalendarOccurrence;
+  /** Identifies this block on the board; the same occurrence can span days. */
+  selectionKey: string;
+  /** True while this block's detail popup is open. */
+  isSelected: boolean;
+  onSelect: SelectOccurrence;
   /** The occurrence started before this day — the block is cut off at the top. */
   continuesBefore: boolean;
   /** The occurrence runs past midnight — the block is cut off at the bottom. */
@@ -15,22 +28,20 @@ interface Props {
   now: Date;
 }
 
-function timeLabel(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: timezone,
-  });
-}
-
 /**
  * One timed event, drawn as a block whose height is its duration. The block is
  * positioned by {@link DayColumn}; everything here only has to survive being
  * short. Container queries reveal the location and feed lines when the block is
  * tall enough to hold them, so a 20-minute event still shows its title.
+ *
+ * The block is a button: a short one cannot show everything the feed knows, so
+ * tapping it opens the detail popup with the rest.
  */
 export function EventCard({
   occurrence,
+  selectionKey,
+  isSelected,
+  onSelect,
   continuesBefore,
   continuesAfter,
   timezone,
@@ -39,11 +50,16 @@ export function EventCard({
   const isPast = new Date(occurrence.endsAt).getTime() < now.getTime();
 
   return (
-    <article
+    <button
+      type="button"
       className={`event-card rounded-end ${isPast ? 'event-card--past' : ''} ${
         continuesBefore ? 'event-card--from-before' : ''
-      } ${continuesAfter ? 'event-card--into-next' : ''}`}
+      } ${continuesAfter ? 'event-card--into-next' : ''} ${
+        isSelected ? 'event-card--selected' : ''
+      }`}
       style={{ borderLeftColor: occurrence.feedColor }}
+      aria-expanded={isSelected}
+      onClick={(event) => onSelect(selectionKey, occurrence, event.currentTarget)}
       title={`${timeLabel(occurrence.startsAt, timezone)}–${timeLabel(
         occurrence.endsAt,
         timezone,
@@ -83,31 +99,43 @@ export function EventCard({
           <i className="bi bi-arrow-repeat" title="Repeating event" aria-hidden="true" />
         )}
       </div>
-    </article>
+    </button>
   );
 }
 
 /**
  * An all-day event. These have no place on a time grid, so they sit in a band
  * above it that is the same height in every column — keeping the hour lines of
- * neighbouring days aligned.
+ * neighbouring days aligned. Tapping one opens the same detail popup a timed
+ * block does.
  */
 export function AllDayChip({
   occurrence,
+  selectionKey,
+  isSelected,
+  onSelect,
   now,
 }: {
   occurrence: CalendarOccurrence;
+  selectionKey: string;
+  isSelected: boolean;
+  onSelect: SelectOccurrence;
   now: Date;
 }): JSX.Element {
   const isPast = new Date(occurrence.endsAt).getTime() < now.getTime();
 
   return (
-    <div
-      className={`allday-chip text-truncate ${isPast ? 'event-card--past' : ''}`}
+    <button
+      type="button"
+      className={`allday-chip text-truncate ${isPast ? 'event-card--past' : ''} ${
+        isSelected ? 'event-card--selected' : ''
+      }`}
       style={{ borderLeftColor: occurrence.feedColor }}
+      aria-expanded={isSelected}
+      onClick={(event) => onSelect(selectionKey, occurrence, event.currentTarget)}
       title={occurrence.summary}
     >
       {occurrence.summary}
-    </div>
+    </button>
   );
 }

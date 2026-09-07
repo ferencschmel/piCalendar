@@ -157,6 +157,14 @@ neighbours' hour lines out of step. How much detail a block shows (end time,
 location, feed) follows from its rendered height via CSS container queries, so a
 20-minute event still reads as a title rather than a clipped paragraph.
 
+The rest of what the feed said — description, organiser, link, status — is one
+tap away: every block is a button that opens `EventDetail` beside it, over the
+neighbouring day rather than over the event being read. The popup is positioned
+in viewport coordinates (the columns clip their overflow, so it cannot live
+inside one) and mirrors to the other side when it would run off the edge. It
+closes on the ×, on Escape, on a tap outside, and on its own after twenty
+seconds — a wall display nobody touches again has to return to showing the week.
+
 ## Presence — the camera, later
 
 The plumbing exists; the detector does not.
