@@ -193,22 +193,28 @@ Inside the dashboard's own header, the view switcher and — off the week view �
 a period stepper sit between the clock and the sync status, the one part of the
 header meant to be touched; everything either side of them is information.
 
-### Three views
+### Four views
 
-The calendar takes one of three shapes, each answering a different question.
+The calendar takes one of four shapes, each answering a different question.
 
-| View  | Question                           | Source                |
-| ----- | ---------------------------------- | --------------------- |
-| Week  | What is happening today?           | `/api/agenda?days=8`  |
-| Month | How busy is the rest of the month? | `/api/agenda?days=42` |
-| Year  | Which weeks are busy? Which month? | `/api/agenda/density` |
+| View   | Question                            | Source                |
+| ------ | ----------------------------------- | --------------------- |
+| 3 days | What is happening today, in detail? | `/api/agenda?days=3`  |
+| Week   | What is happening this week?        | `/api/agenda?days=8`  |
+| Month  | How busy is the rest of the month?  | `/api/agenda?days=42` |
+| Year   | Which weeks are busy? Which month?  | `/api/agenda/density` |
+
+Three days and a week are the same component and the same grid; a third of a
+wall is simply wide enough for a block to carry its location and feed, which an
+eighth is not. Neither takes a period stepper — both are anchored on today, the
+way a wall display that nobody resets has to be.
 
 Only the view on screen polls: `usePolling` takes an `enabled` flag, so the two
 hooks park rather than unmount and switching back paints from the last snapshot
-instead of a spinner. Week and month share a hook because they differ only in
-the range they request — the requested day count identifies which response
-belongs to which, so a month's 42 days is never rendered through the week's
-layout while a switch is in flight.
+instead of a spinner. The three agenda views share a hook because they differ
+only in the range they request — the requested day count identifies which
+response belongs to which, so a month's 42 days is never rendered through the
+week's layout while a switch is in flight.
 
 The month and year anchors are stored as _overrides_: `null` means "whatever
 period today falls in", so an unattended display rolls into the new month by
@@ -230,14 +236,37 @@ per feed, not per event — and tapping anywhere in a mini-month steps into it.
 ### The day grid
 
 Each day is a time grid, not a list: an event's vertical position and height are
-its start and duration. Every column on screen shares one scale, computed in
-`utils/timeline.ts` from the earliest start and the latest end across all days —
-padded and snapped out to whole hours. Two consequences are deliberate:
+its start and duration. Every column on screen shares one scale, defined in
+`utils/timeline.ts`: a fixed twelve-hour band, 08:00–20:00 unless someone moves
+it. Two consequences are deliberate:
 
 - The grid fills the viewport exactly, so nothing is ever scrolled out of reach
   on a display with no input device.
-- The same clock time sits at the same height in every column, so the week is
-  read by scanning across rather than reading each column's labels.
+- The same clock time sits at the same height in every column — and at the same
+  height it was yesterday, which a scale fitted to each day's events could not
+  promise. A wall read from across the room should not need its axis checked
+  first.
+
+Twelve hours of a twenty-four hour day means the 06:30 swim and the 21:00 pickup
+can fall outside it, so the band moves. `useTimeWindow` owns where it is:
+dragging any column pans it — measured against that column's own height, so the
+hour lines travel exactly as far as the finger — and the arrows at the ends of
+the hour axis step it two hours at a time. Three details earn their keep:
+
+- **The band is an override.** It slides back to 08:00–20:00 two minutes after
+  the last touch, for the same reason the month anchor does: whoever dragged it
+  has walked away, and the display has to be right again by morning.
+- **Nothing is hidden quietly.** `offscreenCounts` counts the blocks above and
+  below the band and the axis prints that beside each arrow. A display with no
+  scrollbar has no other way to admit that the evening is not actually empty.
+- **A drag that starts on an event still pans.** The handlers sit on the
+  timeline, not the blocks; six pixels of movement turns the press into a pan
+  and swallows the click that would otherwise open a popup on the way out.
+
+On a screen too narrow for side-by-side columns the days stack and the page
+scrolls, so a vertical drag has to mean "scroll" — there the hour axis flattens
+into a sticky strip of just those two arrows, which keeps the early and late
+edges of the day reachable.
 
 Events that overlap are split into lanes; a cluster of overlapping events all
 use the same lane count, so column edges line up instead of jittering per event.

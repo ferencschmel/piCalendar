@@ -8,10 +8,18 @@
  * navigation bar instead.
  */
 
-/** The three shapes the calendar can take. */
-export type DashboardView = 'week' | 'month' | 'year';
+/** The shapes the calendar can take. */
+export type DashboardView = '3day' | 'week' | 'month' | 'year';
+
+/**
+ * The two that are the same day grid, differing only in how many days they
+ * fit — three days is that grid with room to breathe, wide enough for a block
+ * to show its location and feed, which an eighth of a wall is not.
+ */
+export type TimelineView = Extract<DashboardView, '3day' | 'week'>;
 
 const VIEWS: Array<{ value: DashboardView; label: string; icon: string }> = [
+  { value: '3day', label: '3 Days', icon: 'calendar-range' },
   { value: 'week', label: 'Week', icon: 'calendar-week' },
   { value: 'month', label: 'Month', icon: 'calendar-month' },
   { value: 'year', label: 'Year', icon: 'calendar4-range' },

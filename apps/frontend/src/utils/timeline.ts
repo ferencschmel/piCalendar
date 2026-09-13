@@ -5,9 +5,15 @@ import type { AgendaDay, CalendarOccurrence } from '@picalendar/shared';
  *
  * Every day column shares one vertical scale so a glance across the wall
  * compares like with like: 09:00 on Monday sits at the same height as 09:00 on
- * Thursday. The scale is derived from the earliest start and latest end across
- * every day on screen, so the visible band is exactly as tall as the week needs
- * and nothing is ever scrolled out of sight.
+ * Thursday. The scale is a fixed twelve-hour band rather than one fitted to the
+ * events on screen: the hour rows are then the same height every day of the
+ * week, which is what lets someone read the wall from across the room without
+ * first checking what the axis is claiming today.
+ *
+ * A band shorter than the day means a 06:30 swim or a 21:00 pickup can sit
+ * outside it, so the band pans — see `useTimeWindow`. Nothing is hidden
+ * silently: {@link offscreenCounts} feeds the axis's arrows a count of what is
+ * above and below.
  */
 
 export const MINUTES_PER_DAY = 1440;
@@ -36,17 +42,16 @@ export interface PositionedOccurrence extends DaySpan {
   laneCount: number;
 }
 
-/** Used when nothing timed is on screen — an empty day still needs a scale. */
-const FALLBACK_WINDOW: TimeWindow = { startMinute: 8 * 60, endMinute: 20 * 60 };
-
 /**
- * Below this the hour rows get so tall that two events look unrelated, so a
- * single 30-minute event still renders against a few hours of context.
+ * The band the grid opens on — a household's waking day. Twelve hours is about
+ * the most that stays legible on a wall display: below roughly half an hour per
+ * row, two events an hour apart stop looking an hour apart.
  */
-const MIN_WINDOW_MINUTES = 6 * 60;
+export const DEFAULT_WINDOW_START_MINUTE = 8 * 60;
+export const WINDOW_MINUTES = 12 * 60;
 
-/** Breathing room above the first event and below the last. */
-const WINDOW_PADDING_MINUTES = 30;
+/** One press of an axis arrow. Two hours moves the view without losing it. */
+export const PAN_STEP_MINUTES = 2 * 60;
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
@@ -114,43 +119,15 @@ export function spanWithinDay(
   };
 }
 
-function clampToDay(minute: number): number {
-  return Math.min(Math.max(minute, 0), MINUTES_PER_DAY);
+/** Keep the band inside the day it belongs to, whole minutes either side. */
+export function clampWindowStart(startMinute: number): number {
+  return Math.min(Math.max(startMinute, 0), MINUTES_PER_DAY - WINDOW_MINUTES);
 }
 
-/**
- * The shared vertical scale: the union of every timed occurrence on screen,
- * padded and snapped out to whole hours so the axis labels land on round times.
- */
-export function computeTimeWindow(days: AgendaDay[], timezone: string): TimeWindow {
-  let earliest = Number.POSITIVE_INFINITY;
-  let latest = Number.NEGATIVE_INFINITY;
-
-  for (const day of days) {
-    for (const occurrence of day.occurrences) {
-      if (occurrence.allDay) continue;
-      const span = spanWithinDay(occurrence, day.date, timezone);
-      earliest = Math.min(earliest, span.startMinute);
-      latest = Math.max(latest, span.endMinute);
-    }
-  }
-
-  if (!Number.isFinite(earliest) || !Number.isFinite(latest)) return FALLBACK_WINDOW;
-
-  let startMinute = Math.floor(clampToDay(earliest - WINDOW_PADDING_MINUTES) / 60) * 60;
-  let endMinute = Math.ceil(clampToDay(latest + WINDOW_PADDING_MINUTES) / 60) * 60;
-
-  // Grow a thin window towards the end of the day first — the evening is where
-  // a household's next event is most likely to appear.
-  let deficit = MIN_WINDOW_MINUTES - (endMinute - startMinute);
-  if (deficit > 0) {
-    const growEnd = Math.min(deficit, MINUTES_PER_DAY - endMinute);
-    endMinute += growEnd;
-    deficit -= growEnd;
-  }
-  if (deficit > 0) startMinute -= Math.min(deficit, startMinute);
-
-  return { startMinute, endMinute };
+/** The window whose top edge is `startMinute`, clamped into the day. */
+export function windowFromStart(startMinute: number): TimeWindow {
+  const start = clampWindowStart(startMinute);
+  return { startMinute: start, endMinute: start + WINDOW_MINUTES };
 }
 
 export function windowMinutes(window: TimeWindow): number {
@@ -227,4 +204,34 @@ export function layoutDay(
 /** All-day (and multi-day) occurrences, which live in a band above the grid. */
 export function allDayOccurrences(day: AgendaDay): CalendarOccurrence[] {
   return day.occurrences.filter((occurrence) => occurrence.allDay);
+}
+
+/**
+ * How many timed blocks sit above and below the visible band, counted the way
+ * the columns draw them — an event covering two days is one mark on each.
+ *
+ * The wall has no scrollbar to hint that there is more, so this is the only
+ * thing standing between a panned-down grid and a household missing the 07:45
+ * bus. The axis turns it into a number beside each arrow.
+ */
+export function offscreenCounts(
+  days: AgendaDay[],
+  timezone: string,
+  window: TimeWindow,
+): { before: number; after: number } {
+  let before = 0;
+  let after = 0;
+
+  for (const day of days) {
+    for (const occurrence of day.occurrences) {
+      if (occurrence.allDay) continue;
+      const span = spanWithinDay(occurrence, day.date, timezone);
+      // A block that merely starts early still shows if it runs into the band,
+      // so only the ones with no overlap at all are counted as out of sight.
+      if (span.endMinute <= window.startMinute) before += 1;
+      else if (span.startMinute >= window.endMinute) after += 1;
+    }
+  }
+
+  return { before, after };
 }

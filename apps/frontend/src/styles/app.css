@@ -541,11 +541,26 @@ body,
 
 /* --- Time grid ----------------------------------------------------------- */
 
+/*
+ * The grid shows twelve hours of a twenty-four hour day, so it drags: a
+ * vertical swipe anywhere on a column moves the shared band, and the browser
+ * must not claim that gesture first. `touch-action: none` is safe here because
+ * the wide layout does not scroll at all — the narrow one hands the gesture
+ * back, see the stacked layout below.
+ */
 .day-column__timeline {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  touch-action: none;
+  /* A drag is panning the grid, not sweeping a selection across the blocks. */
+  user-select: none;
+  cursor: grab;
+}
+
+.day-column__timeline:active {
+  cursor: grabbing;
 }
 
 .timeline__hour-line {
@@ -946,7 +961,9 @@ body,
  */
 .time-axis {
   flex: 0 0 auto;
-  width: 3.1rem;
+  /* Two lanes: the pan arrows on the left, the hour labels right-aligned
+   * beside them. Sharing one lane would put a control on top of "08:00". */
+  width: 5rem;
   --bs-card-bg: transparent;
   border-color: transparent;
 }
@@ -959,6 +976,59 @@ body,
 
 .time-axis__body {
   overflow: visible;
+  /* Nothing to drag here — the arrows do the job on this side. */
+  touch-action: auto;
+  cursor: default;
+}
+
+/*
+ * One end of the band, and the only thing on the wall that admits the grid is
+ * hiding something: the badge counts the blocks out of sight that way. Kept in
+ * place when there are none, so the hour labels never shift under it.
+ */
+.time-axis__pan {
+  position: absolute;
+  left: 0;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  /* Aimed at a fingertip rather than a cursor: the wall display has no mouse. */
+  min-width: 2rem;
+  padding: 0.3rem 0.35rem;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--bs-secondary-color);
+  background-color: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 1rem;
+  cursor: pointer;
+}
+
+.time-axis__pan--earlier {
+  top: 0;
+}
+
+.time-axis__pan--later {
+  bottom: 0;
+}
+
+.time-axis__pan:hover:not(:disabled) {
+  color: var(--bs-emphasis-color);
+  background-color: var(--bs-secondary-bg);
+}
+
+/* The band is against the top or bottom of the day; there is nowhere to go. */
+.time-axis__pan:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.time-axis__pan-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--bs-emphasis-color);
 }
 
 .time-axis__label {
@@ -992,8 +1062,47 @@ body,
     height: 55vh;
   }
 
+  /*
+   * The page itself scrolls here, so a vertical drag on a column has to mean
+   * "scroll" — which leaves the arrows as the only way to reach an early or
+   * late event. The axis therefore stays, flattened into a sticky strip of
+   * exactly those two controls, and its hour labels go instead: the blocks
+   * carry their own times.
+   */
+  .day-column__timeline {
+    touch-action: pan-y;
+    cursor: default;
+  }
+
   .time-axis {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+    width: auto;
+    padding: 0.25rem 0;
+    background-color: var(--bs-body-bg);
+  }
+
+  .time-axis .card-header,
+  .time-axis .day-column__allday,
+  .time-axis__label {
     display: none;
+  }
+
+  .time-axis__body {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .time-axis__pan {
+    position: static;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.85rem;
   }
 }
 

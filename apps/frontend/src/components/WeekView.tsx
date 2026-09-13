@@ -3,7 +3,8 @@ import type { AgendaDay } from '@picalendar/shared';
 import { DayColumn } from './DayColumn.js';
 import type { SelectOccurrence } from './EventCard.js';
 import { TimeAxis } from './TimeAxis.js';
-import { allDayOccurrences, computeTimeWindow } from '../utils/timeline.js';
+import { usePanGesture, useTimeWindow } from '../hooks/useTimeWindow.js';
+import { allDayOccurrences, offscreenCounts } from '../utils/timeline.js';
 
 /**
  * How many rows the band above the time grid shows before it scrolls. Every
@@ -23,14 +24,21 @@ interface Props {
 
 /**
  * Today plus the following days as side-by-side time grids — the dashboard's
- * default and the only view that shows an event's name and hour without being
- * asked.
+ * default shape, whether it is showing three days or eight, and the only view
+ * that shows an event's name and hour without being asked.
  */
 export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props): JSX.Element {
-  // One scale for the whole board: the earliest start and latest end anywhere
-  // on screen set the top and bottom of every column, so a day is read by
-  // height alone and events never scroll out of view.
-  const timeWindow = useMemo(() => computeTimeWindow(days, timezone), [days, timezone]);
+  // One scale for the whole board — a fixed twelve hours, pannable — so a day
+  // is read by height alone and 09:00 is at the same height in every column.
+  const { timeWindow, pan, canPanEarlier, canPanLater } = useTimeWindow();
+  const panHandlers = usePanGesture(pan, timeWindow);
+
+  // What the band is cutting off, so the axis can say so rather than leaving a
+  // display nobody is watching quietly claiming the evening is empty.
+  const offscreen = useMemo(
+    () => offscreenCounts(days, timezone, timeWindow),
+    [days, timezone, timeWindow],
+  );
 
   // The band is as tall as the busiest day needs, in every column, so the hour
   // gridlines stay level across the board. Birthdays share it with the all-day
@@ -49,7 +57,14 @@ export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props):
       className="dashboard__grid flex-grow-1 px-3 pb-3"
       style={{ '--pical-allday-rows': allDayRows } as CSSProperties}
     >
-      <TimeAxis timeWindow={timeWindow} showAllDayBand={allDayRows > 0} />
+      <TimeAxis
+        timeWindow={timeWindow}
+        showAllDayBand={allDayRows > 0}
+        offscreen={offscreen}
+        canPanEarlier={canPanEarlier}
+        canPanLater={canPanLater}
+        onPan={pan}
+      />
       {days.map((day) => (
         <DayColumn
           key={day.date}
@@ -58,6 +73,7 @@ export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props):
           now={now}
           timeWindow={timeWindow}
           showAllDayBand={allDayRows > 0}
+          panHandlers={panHandlers}
           selectedKey={selectedKey}
           onSelect={onSelect}
         />

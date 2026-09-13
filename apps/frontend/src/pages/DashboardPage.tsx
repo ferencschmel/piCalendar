@@ -11,7 +11,12 @@ import { useClock } from '../hooks/useClock.js';
 import { EventDetail } from '../components/EventDetail.js';
 import type { SelectOccurrence } from '../components/EventCard.js';
 import { MonthView } from '../components/MonthView.js';
-import { PeriodNav, ViewSwitcher, type DashboardView } from '../components/ViewControls.js';
+import {
+  PeriodNav,
+  ViewSwitcher,
+  type DashboardView,
+  type TimelineView,
+} from '../components/ViewControls.js';
 import { WeekView } from '../components/WeekView.js';
 import { YearView } from '../components/YearView.js';
 import { dateKey } from '../utils/datetime.js';
@@ -27,8 +32,9 @@ import {
   type MonthAnchor,
 } from '../utils/calendarGrid.js';
 
-/** Today plus the next seven days. */
-const DAYS = 8;
+/** Today plus the following days, per time-grid view. */
+const TIMELINE_VIEW_DAYS: Record<TimelineView, number> = { '3day': 3, week: 8 };
+
 const AGENDA_POLL_MS = 60_000;
 /** Presence changes fast; the agenda it selects does not. */
 const PRESENCE_POLL_MS = 15_000;
@@ -71,10 +77,11 @@ export function DashboardPage(): JSX.Element {
   );
   const presenceKey = presentIds.join(',');
 
-  // The week and month views differ only in the range they ask for, so they
-  // share one poll; the year view asks a different endpoint entirely and gets
-  // its own. Exactly one of the two is ever live.
+  // The three grid views — three days, a week, a month — differ only in the
+  // range they ask for, so they share one poll; the year view asks a different
+  // endpoint entirely and gets its own. Exactly one of the two is ever live.
   const isYear = view === 'year';
+  const isTimeline = view === '3day' || view === 'week';
 
   /**
    * The zone every label is rendered in. Held in state, not read off the latest
@@ -89,7 +96,7 @@ export function DashboardPage(): JSX.Element {
   const year = yearOverride ?? Number(todayKey.slice(0, 4));
 
   const agendaStart = view === 'month' ? monthGridStart(monthAnchor) : undefined;
-  const agendaDays = view === 'month' ? MONTH_GRID_DAYS : DAYS;
+  const agendaDays = isTimeline ? TIMELINE_VIEW_DAYS[view] : MONTH_GRID_DAYS;
 
   const agenda = usePolling<AgendaResponse>(
     () => api.agenda({ start: agendaStart, days: agendaDays, personId: presentIds }),
@@ -122,9 +129,10 @@ export function DashboardPage(): JSX.Element {
    * The agenda for the range the current view actually asked for.
    *
    * `usePolling` keeps the previous response on screen while a new one is in
-   * flight, which is right for a refresh and wrong for a view switch — week and
-   * month want different day counts, and rendering one through the other's
-   * layout would be nonsense. The requested length identifies the response.
+   * flight, which is right for a refresh and wrong for a view switch — the
+   * three grid views want different day counts, and rendering one through
+   * another's layout would be nonsense. The requested length identifies the
+   * response.
    */
   const agendaData = agenda.data?.days.length === agendaDays ? agenda.data : null;
 
@@ -190,7 +198,7 @@ export function DashboardPage(): JSX.Element {
         </div>
 
         <div className="dashboard__controls">
-          {view !== 'week' && (
+          {!isTimeline && (
             <PeriodNav
               label={isYear ? String(year) : monthLabel(monthAnchor)}
               unit={isYear ? 'year' : 'month'}
@@ -242,7 +250,7 @@ export function DashboardPage(): JSX.Element {
         </div>
       )}
 
-      {view === 'week' &&
+      {isTimeline &&
         (agendaData ? (
           <WeekView
             days={agendaData.days}

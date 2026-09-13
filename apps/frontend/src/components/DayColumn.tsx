@@ -1,4 +1,5 @@
 import type { AgendaDay } from '@picalendar/shared';
+import type { PanHandlers } from '../hooks/useTimeWindow.js';
 import { BirthdayChip } from './BirthdayChip.js';
 import { AllDayChip, EventCard, type SelectOccurrence } from './EventCard.js';
 import {
@@ -18,6 +19,11 @@ interface Props {
   timeWindow: TimeWindow;
   /** Whether any day on screen has all-day events, so the band is reserved. */
   showAllDayBand: boolean;
+  /**
+   * Drag-to-pan, shared by every column: the band is one scale, so it does not
+   * matter which day's grid the finger lands on.
+   */
+  panHandlers: PanHandlers;
   /** Key of the block whose detail popup is open, if it is one of this day's. */
   selectedKey: string | null;
   onSelect: SelectOccurrence;
@@ -32,6 +38,7 @@ export function DayColumn({
   now,
   timeWindow,
   showAllDayBand,
+  panHandlers,
   selectedKey,
   onSelect,
 }: Props): JSX.Element {
@@ -47,7 +54,7 @@ export function DayColumn({
   const positioned = layoutDay(day, timezone, timeWindow);
 
   // The current-time line only makes sense on today, and only while the clock
-  // is inside the window the events themselves defined.
+  // is inside the band the grid is currently showing.
   const nowMinute = day.isToday ? minutesFromDayStart(now.toISOString(), timezone, day.date) : null;
   const showNowLine =
     nowMinute !== null && nowMinute >= timeWindow.startMinute && nowMinute <= timeWindow.endMinute;
@@ -86,7 +93,7 @@ export function DayColumn({
         </div>
       )}
 
-      <div className="day-column__timeline">
+      <div className="day-column__timeline" {...panHandlers}>
         {hourMarks(timeWindow).map((minute) => (
           <div
             key={minute}

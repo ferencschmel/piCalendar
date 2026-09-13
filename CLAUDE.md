@@ -135,11 +135,20 @@ value on screen while a refresh is in flight, pauses while the tab is hidden,
 re-fetches on wake, and takes an `enabled` flag so parked views stop fetching
 without unmounting.
 
-The dashboard has three views (week / month / year) sharing one header. Week and
-month share a poll and differ only in the range requested; the year uses the
-compact density endpoint. Period anchors are stored as _overrides_ where `null`
-means "whatever period today falls in", so an unattended display rolls into the
-new month by itself.
+The dashboard has four views (3 days / week / month / year) sharing one header.
+The first three share a poll and differ only in the range requested — three days
+and a week are the same `WeekView` grid, at three columns and eight — while the
+year uses the compact density endpoint. Period anchors are stored as _overrides_
+where `null` means "whatever period today falls in", so an unattended display
+rolls into the new month by itself.
+
+The day grid shows a fixed twelve hours, 08:00–20:00 by default, rather than a
+scale fitted to the events on screen: the hour rows are then the same height
+every day. Anything outside that band is reached by dragging the grid (or the
+arrows at the ends of the hour axis), and `offscreenCounts` puts a count beside
+those arrows — a band narrower than the day must never let the wall imply an
+empty evening. The pan is an override like the period anchors and expires the
+same way, returning to 08:00–20:00 two minutes after the last touch.
 
 `AgendaResponse.revision` changes only when ingest actually wrote something, so a
 client can skip a repaint on an unchanged poll.
