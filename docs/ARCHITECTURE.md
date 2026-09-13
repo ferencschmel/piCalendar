@@ -175,10 +175,23 @@ value on screen while a refresh is in flight (a wall display must never flash a
 spinner or blank on a transient network blip), pauses while the tab is hidden,
 and re-fetches immediately on wake so a screen coming out of sleep is current.
 
-The dashboard hides the navbar and puts a faint gear in the top-right corner
-instead: an admin affordance that does not eat space the calendar wants.
-Between the clock and that gear sit the view switcher and, off the week view, a
-period stepper — the one part of the header meant to be touched.
+Every page sits in one frame: the page itself, and a navigation bar along the
+bottom edge — calendar, tasks, menu, custom lists, settings, each an icon and a
+word. Bottom rather than top because a wall-mounted screen is reached by hand
+and the bottom edge is the part of it a person can touch without stretching;
+icon _and_ word because the icons alone are a guessing game for someone who
+uses this twice a week. The bar is sticky and occupies real height rather than
+floating over the page, and the dashboard subtracts that height from the
+viewport (`--pical-nav-height`) — nothing on an unattended display may end up
+underneath chrome nobody can scroll out from behind.
+
+Tasks, menu and custom lists are placeholders for now, and say so on the page
+rather than showing an empty shell: a blank page is indistinguishable from one
+that failed to load. Settings is the admin page, still routed at `/admin`.
+
+Inside the dashboard's own header, the view switcher and — off the week view —
+a period stepper sit between the clock and the sync status, the one part of the
+header meant to be touched; everything either side of them is information.
 
 ### Three views
 

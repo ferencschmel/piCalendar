@@ -144,8 +144,12 @@ new month by itself.
 `AgendaResponse.revision` changes only when ingest actually wrote something, so a
 client can skip a repaint on an unchanged poll.
 
-The admin page is reached by a deliberately faint gear in the corner — an
-affordance that does not eat space the calendar wants.
+`Layout` wraps every page in the same frame: the page, and `AppNav` along the
+bottom — calendar, tasks, menu, custom lists, settings. It is sticky and takes
+real height, and the dashboard sizes itself to the viewport _minus_
+`--pical-nav-height`; keep those two in step or the day grid runs under the bar.
+The admin page is the "Settings" entry, still routed at `/admin`. Tasks, menu
+and lists are `ComingSoon` placeholders.
 
 ## Conventions
 

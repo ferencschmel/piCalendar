@@ -40,5 +40,5 @@ sudo raspi-config nonint do_blanking 1
 The dashboard already re-polls immediately when the tab becomes visible, so a
 screen that sleeps and wakes shows current data without a manual reload.
 
-To reach the admin page from the wall display, tap the top-right corner — the
-gear hotspot is deliberately faint so it does not distract.
+To reach the settings (admin) page from the wall display, tap **Settings** in
+the navigation bar along the bottom edge.

@@ -1,12 +1,18 @@
 /*
  * Bootstrap carries the layout and components; this file only adds what a
  * wall-mounted display needs on top — a fixed-height day grid, larger type at
- * viewing distance, and a discreet way back to the admin page.
+ * viewing distance, and a bottom navigation bar sized for fingertips.
  */
 
 :root {
   /* Height of one all-day chip; the band is a whole number of these. */
   --pical-allday-row-height: 1.4rem;
+  /*
+   * The bottom navigation bar. Declared here rather than left to the content
+   * because the dashboard subtracts it from the viewport to size its grid, so
+   * the two have to agree exactly or the day columns run under the bar.
+   */
+  --pical-nav-height: 4.25rem;
 }
 
 html,
@@ -20,11 +26,13 @@ body,
 /*
  * The dashboard owns the viewport height itself rather than inheriting it — the
  * layout above it is sized by `min-height`, which leaves a percentage height
- * indefinite and would collapse the day grid to its content.
+ * indefinite and would collapse the day grid to its content. The navigation bar
+ * is subtracted rather than overlaid: nothing on a wall display may sit under
+ * chrome nobody can scroll out from behind.
  */
 .dashboard {
-  height: 100vh;
-  height: 100dvh;
+  height: calc(100vh - var(--pical-nav-height));
+  height: calc(100dvh - var(--pical-nav-height));
   overflow: hidden;
 }
 
@@ -165,10 +173,11 @@ body,
 /* --- Header controls ----------------------------------------------------- */
 
 /*
- * The view switcher and period stepper sit between the clock and the admin
- * gear — the one part of the header meant to be touched. `flex: 1` on the
- * middle group keeps it optically centred even though the clock on the left and
- * the status on the right are never the same width.
+ * The view switcher and period stepper sit between the clock and the sync
+ * status — the one part of the header meant to be touched, everything around it
+ * being information. `flex: 1` on the middle group keeps it optically centred
+ * even though the clock on the left and the status on the right are never the
+ * same width.
  */
 .dashboard__controls {
   display: flex;
@@ -178,11 +187,6 @@ body,
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
   min-width: 0;
-}
-
-/* Clear of the fixed admin hotspot in the corner. */
-.dashboard__status {
-  padding-right: 2.5rem;
 }
 
 .view-switcher .btn {
@@ -993,31 +997,126 @@ body,
   }
 }
 
-/* --- Admin --------------------------------------------------------------- */
+/* --- Navigation ---------------------------------------------------------- */
 
 /*
- * Corner target that opens the admin page. Kept nearly invisible so it does not
- * distract on the wall, but large enough to hit reliably by touch.
+ * The bottom bar, present and identical on every page.
+ *
+ * Sticky rather than fixed: it occupies real height in the layout, so a page
+ * that scrolls — the admin page, the year view on a small screen — can never
+ * end with its last row hidden underneath it, and it is still pinned to the
+ * bottom edge while that scrolling happens.
  */
-.dashboard-admin-hotspot {
-  position: fixed;
-  top: 0;
-  right: 0;
+.app-nav {
+  position: sticky;
+  bottom: 0;
   z-index: 1030;
-  width: 3rem;
-  height: 3rem;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--bs-secondary-color);
-  opacity: 0.15;
-  transition: opacity 0.2s ease-in-out;
+  flex: 0 0 auto;
+  height: var(--pical-nav-height);
+  background-color: var(--bs-body-tertiary-bg, var(--bs-tertiary-bg));
+  border-top: 1px solid var(--bs-border-color);
 }
 
-.dashboard-admin-hotspot:hover,
-.dashboard-admin-hotspot:focus-visible {
-  opacity: 1;
+/*
+ * Equal shares of the width. A wall display is wide and the bar is the only
+ * thing on it anyone reaches for, so the targets are as large as the screen
+ * allows rather than as small as the labels need.
+ */
+.app-nav__item {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0.35rem 0.25rem;
+  text-align: center;
+  text-decoration: none;
+  color: var(--bs-secondary-color);
+  border-top: 3px solid transparent;
+  /* Cancels the 1px border above, so the strip does not nudge the icons down. */
+  margin-top: -1px;
 }
+
+.app-nav__item:hover,
+.app-nav__item:focus-visible {
+  color: var(--bs-emphasis-color);
+  background-color: var(--bs-secondary-bg);
+}
+
+/*
+ * Colour plus a top strip. Colour alone is easy to miss from across a room, and
+ * on a display left on one page for hours "where am I" has to be answerable at
+ * a glance.
+ */
+.app-nav__item--active {
+  color: var(--bs-primary);
+  border-top-color: var(--bs-primary);
+}
+
+.app-nav__icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.app-nav__label {
+  font-size: 0.8rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/*
+ * Narrow screens keep both the icon and the word — the word is the half that
+ * makes an unfamiliar icon legible — and shrink the type instead.
+ */
+@media (max-width: 575.98px) {
+  :root {
+    --pical-nav-height: 3.6rem;
+  }
+
+  .app-nav__icon {
+    font-size: 1.2rem;
+  }
+
+  .app-nav__label {
+    font-size: 0.65rem;
+  }
+}
+
+/* --- Coming soon --------------------------------------------------------- */
+
+/*
+ * A navigation entry whose page is not built yet. Centred and deliberately
+ * plain: it exists to say "this is not broken, it is not finished".
+ */
+.coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 60vh;
+  text-align: center;
+}
+
+.coming-soon__icon {
+  font-size: 3.5rem;
+  line-height: 1;
+  color: var(--bs-secondary-color);
+  opacity: 0.5;
+}
+
+.coming-soon__description {
+  max-width: 32rem;
+  margin: 0;
+}
+
+/* --- Admin --------------------------------------------------------------- */
 
 .feed-url {
   max-width: 22rem;

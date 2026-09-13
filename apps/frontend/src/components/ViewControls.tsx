@@ -2,9 +2,10 @@
  * The dashboard's header controls: which calendar shape is on screen, and which
  * period that shape is showing.
  *
- * They sit between the clock and the admin gear because that is the one part of
- * the header a passer-by is meant to touch — the clock is information and the
- * gear is deliberately hard to find.
+ * They sit between the clock and the sync status because that is the one part
+ * of the header a passer-by is meant to touch — everything either side of them
+ * is information. Everything that leaves the calendar lives in the bottom
+ * navigation bar instead.
  */
 
 /** The three shapes the calendar can take. */
