@@ -611,7 +611,7 @@ body,
   z-index: 2;
   /* A five-minute event still has to be legible, so blocks never shrink below
    * one line of text even though their top edge stays true to the clock. */
-  min-height: 1.5rem;
+  min-height: 1.55rem;
   /*
    * Each slot is a query container, so the block inside it shows the amount of
    * detail its duration affords rather than a guess made in JavaScript.
@@ -680,6 +680,7 @@ body,
 
 .event-card__time {
   font-size: 0.95rem;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--bs-secondary-color);
@@ -690,11 +691,29 @@ body,
   display: none;
 }
 
+/*
+ * Long team names are common in SportsEngine feeds, so the title wraps — but a
+ * block is only as tall as its event is long, and hiding the overflow slices
+ * the last line through the middle of its letters. Clamping to whole lines ends
+ * it on an ellipsis instead, which reads as "there is more" rather than as a
+ * rendering fault; the block's `title` and the detail popup carry the rest.
+ *
+ * The line budget is what the block can actually hold, raised by the container
+ * steps below. Re-derive it from
+ *   (block height - 0.2rem padding - 1.14rem time row) / 1.323rem per line
+ * if any of those three change.
+ */
 .event-card__summary {
+  --pical-summary-lines: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--pical-summary-lines);
+  line-clamp: var(--pical-summary-lines);
+  /* Lets the title shrink inside the row layout instead of pushing the time out. */
+  min-width: 0;
   font-size: 1.15rem;
   line-height: 1.15;
   overflow: hidden;
-  /* Long team names are common in SportsEngine feeds; wrap rather than clip. */
   overflow-wrap: anywhere;
 }
 
@@ -718,7 +737,18 @@ body,
   }
 }
 
-@container (min-height: 5.6rem) {
+@container (min-height: 4rem) {
+  .event-card__summary {
+    --pical-summary-lines: 2;
+  }
+}
+
+/*
+ * The location and feed rows cost two lines of their own, so they wait until
+ * the block can seat them without spending the title's second line: a taller
+ * block must never show less of the title than a shorter one.
+ */
+@container (min-height: 6.65rem) {
   .event-card__meta--optional {
     display: block;
   }
@@ -727,6 +757,18 @@ body,
     display: flex;
     align-items: center;
     gap: 0.25rem;
+  }
+}
+
+@container (min-height: 7.95rem) {
+  .event-card__summary {
+    --pical-summary-lines: 3;
+  }
+}
+
+@container (min-height: 9.3rem) {
+  .event-card__summary {
+    --pical-summary-lines: 4;
   }
 }
 
