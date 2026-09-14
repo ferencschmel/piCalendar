@@ -10,6 +10,8 @@ interface Props {
   timeWindow: TimeWindow;
   /** Mirrors the day columns' all-day band so the hour labels stay aligned. */
   showAllDayBand: boolean;
+  /** And the menu strip below it, for the same reason. */
+  showMenuStrip: boolean;
   /** Timed blocks sitting above and below the visible band, across every day. */
   offscreen: { before: number; after: number };
   canPanEarlier: boolean;
@@ -31,6 +33,7 @@ interface Props {
 export function TimeAxis({
   timeWindow,
   showAllDayBand,
+  showMenuStrip,
   offscreen,
   canPanEarlier,
   canPanLater,
@@ -77,6 +80,8 @@ export function TimeAxis({
           onPan={onPan}
         />
       </div>
+
+      {showMenuStrip && <div className="menu-strip" aria-hidden="true" />}
     </div>
   );
 }

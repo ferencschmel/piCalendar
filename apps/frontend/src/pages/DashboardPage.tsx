@@ -3,12 +3,14 @@ import type {
   AgendaDensityResponse,
   AgendaResponse,
   CalendarOccurrence,
+  PlannedDish,
   PresenceState,
 } from '@picalendar/shared';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { useClock } from '../hooks/useClock.js';
 import { EventDetail } from '../components/EventDetail.js';
+import { RecipeDetail } from '../components/RecipeDetail.js';
 import type { SelectOccurrence } from '../components/EventCard.js';
 import { MonthView } from '../components/MonthView.js';
 import {
@@ -66,6 +68,18 @@ export function DashboardPage(): JSX.Element {
     [],
   );
   const clearSelection = useCallback(() => setSelection(null), []);
+
+  /**
+   * The dish whose recipe is open, if any. Separate from `selection` because
+   * it is a different kind of thing on screen — a full-width card someone is
+   * cooking from, not a popup pinned beside a block — and the two should never
+   * be open at once.
+   */
+  const [recipe, setRecipe] = useState<PlannedDish | null>(null);
+  const openRecipe = useCallback((dish: PlannedDish) => {
+    setSelection(null);
+    setRecipe(dish);
+  }, []);
 
   const presence = usePolling<PresenceState>(() => api.presence(), PRESENCE_POLL_MS);
 
@@ -146,6 +160,7 @@ export function DashboardPage(): JSX.Element {
   // Anything that replaces the grid detaches the element the popup points at.
   const changeView = useCallback((next: DashboardView) => {
     setSelection(null);
+    setRecipe(null);
     setView(next);
   }, []);
 
@@ -258,6 +273,7 @@ export function DashboardPage(): JSX.Element {
             now={now}
             selectedKey={selection?.key ?? null}
             onSelect={select}
+            onOpenRecipe={openRecipe}
           />
         ) : (
           <Loading show={!agenda.error} />
@@ -292,6 +308,8 @@ export function DashboardPage(): JSX.Element {
         ) : (
           <Loading show={!density.error} />
         ))}
+
+      {recipe && <RecipeDetail dish={recipe} onClose={() => setRecipe(null)} />}
 
       {selection && (
         <EventDetail

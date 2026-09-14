@@ -17,6 +17,14 @@
    * the two have to agree exactly or the day columns run under the bar.
    */
   --pical-nav-height: 4.75rem;
+  /*
+   * Height of one line in a day column's menu strip — a dish, or the meal name
+   * above a group of them. The strip is a whole number of these and is
+   * reserved across every column at once, for the same reason the all-day band
+   * is: a row only some days carried would leave those days a shorter hour
+   * grid than their neighbours, and the shared time scale would stop matching.
+   */
+  --pical-menu-row-height: 1.35rem;
 }
 
 html,
@@ -1299,5 +1307,726 @@ body,
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;
+  }
+}
+
+/* --- Menu on the dashboard ---------------------------------------------- */
+
+/*
+ * What is planned to be eaten, along the bottom of a day column.
+ *
+ * Below the hour grid rather than in the band above it, because a meal is not
+ * an all-day event — it has no start, no end and no slot on the grid — and
+ * because that is the order the day reads on a wall: calendar above, dinner
+ * underneath. Its height comes from `--pical-menu-rows`, which the week view
+ * sets once for the whole board.
+ */
+.menu-strip {
+  flex: 0 0 auto;
+  height: calc(var(--pical-menu-rows, 0) * var(--pical-menu-row-height) + 0.4rem);
+  padding: 0.2rem 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow-y: auto;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.menu-strip__meal {
+  display: contents;
+}
+
+.menu-strip__label {
+  height: var(--pical-menu-row-height);
+  line-height: var(--pical-menu-row-height);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+}
+
+.menu-strip__dish {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: var(--pical-menu-row-height);
+  padding: 0 0.3rem;
+  font-size: 0.88rem;
+  text-align: left;
+  color: var(--bs-body-color);
+  background-color: var(--bs-tertiary-bg);
+  border: 0;
+  border-left: 3px solid var(--bs-border-color);
+  border-radius: 0.2rem;
+}
+
+/* Only the dishes with a recipe behind them are worth pressing. */
+.menu-strip__dish--openable {
+  cursor: pointer;
+}
+
+.menu-strip__dish:disabled {
+  /* A non-interactive line, not a disabled control: no dimming. */
+  opacity: 1;
+}
+
+.menu-strip__name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.menu-strip__recipe {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+}
+
+/* The one line a month cell gives to dinner. */
+.month-cell__menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin-bottom: 0.15rem;
+  min-width: 0;
+}
+
+.month-cell__dish {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--bs-secondary-color);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * The recipe, opened from the wall. A card rather than the pinned popup an
+ * event gets: somebody is cooking from this with their hands full, so it is
+ * big, central, and has no auto-close timer.
+ */
+.recipe-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background-color: rgba(0, 0, 0, 0.45);
+}
+
+.recipe-card {
+  width: min(46rem, 100%);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem 1.5rem;
+  background-color: var(--bs-body-bg);
+  border-radius: 0.5rem;
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.35);
+}
+
+.recipe-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.recipe-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.recipe-card__subhead {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.5rem;
+}
+
+.recipe-card__ingredients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.15rem 1.5rem;
+}
+
+.recipe-card__ingredients li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+
+.recipe-card__method {
+  /* Prose from a recipe card: its line breaks are the only structure it has. */
+  white-space: pre-wrap;
+  margin: 0;
+  line-height: 1.65;
+}
+
+/* --- Menu planner ------------------------------------------------------- */
+
+/*
+ * Full-bleed like the dashboard, and sized the same way: the navigation bar is
+ * subtracted rather than overlaid, because a week of meals must not run under
+ * chrome nobody can scroll out from behind.
+ */
+.menu-page {
+  height: calc(100vh - var(--pical-nav-height));
+  height: calc(100dvh - var(--pical-nav-height));
+  overflow: hidden;
+}
+
+.menu-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.85rem 1rem 0.6rem;
+}
+
+.menu-page__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.menu-page__range {
+  min-width: 11rem;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.menu-page__meals {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.menu-page__status {
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+}
+
+/*
+ * The grid and the rail. The rail is a fixed column rather than a fraction so
+ * a dish name does not reflow every time a week fills up.
+ */
+.menu-page__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 17rem;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+/*
+ * Meals down, days across.
+ *
+ * Stacking the meals inside each day column was the obvious alternative and it
+ * is worse here: it makes every drop target a third of a seventh of the
+ * screen, which is smaller than a finger. As rows, a cell is the full width of
+ * a day, and the eye reads "what is for dinner this week" straight across.
+ */
+.menu-week {
+  display: grid;
+  grid-template-columns: 5.5rem repeat(7, minmax(0, 1fr));
+  /* The header row takes what it needs; the meal rows share the rest equally,
+   * so the week fills the wall instead of stranding the planned days in a
+   * strip along the top. `--menu-week-rows` is set by the page. */
+  grid-template-rows: auto repeat(var(--menu-week-rows, 3), minmax(6rem, 1fr));
+  gap: 0.3rem;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.menu-week__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+.menu-week__corner {
+  grid-column: 1;
+}
+
+.menu-week__dayhead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.2rem;
+  border-bottom: 2px solid transparent;
+}
+
+.menu-week__dayhead--today {
+  border-bottom-color: var(--bs-primary);
+}
+
+.menu-week__weekday {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+}
+
+.menu-week__daynum {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.menu-week__mealhead {
+  display: flex;
+  align-items: center;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  padding-right: 0.4rem;
+}
+
+.menu-week__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-height: 5.5rem;
+  padding: 0.25rem;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.35rem;
+  /* The whole cell is the drop target, so the gesture must not be read as a
+   * scroll of the grid underneath it. */
+  touch-action: none;
+}
+
+.menu-week__cell--today {
+  border-color: var(--bs-primary-border-subtle);
+  background-color: var(--bs-primary-bg-subtle);
+}
+
+/* Every cell shows it can take the dish, while one is in hand. */
+.menu-week__cell--open {
+  border-style: dashed;
+}
+
+.menu-week__cell--hover {
+  border-style: solid;
+  border-color: var(--bs-primary);
+  background-color: var(--bs-primary-bg-subtle);
+  box-shadow: inset 0 0 0 1px var(--bs-primary);
+}
+
+.menu-week__drop {
+  margin-top: auto;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--bs-primary);
+}
+
+.menu-week__empty {
+  flex: 1 1 auto;
+}
+
+/*
+ * A planned dish, in its cell.
+ *
+ * Two lines rather than one: a cell is a seventh of the screen, and putting
+ * the course picker beside the name clipped every dish to three letters. The
+ * name is what a person reads from across the kitchen, so it gets the width
+ * and the course goes underneath.
+ */
+.menu-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.2rem 0.15rem 0.2rem 0.35rem;
+  font-size: 0.85rem;
+  background-color: var(--bs-tertiary-bg);
+  border-left: 3px solid var(--bs-border-color);
+  border-radius: 0.2rem;
+  cursor: grab;
+}
+
+.menu-chip__top {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.menu-chip--held {
+  opacity: 0.4;
+}
+
+.menu-chip__icon {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+}
+
+.menu-chip__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * The course, editable in place. A drop guesses the course from the dish, so
+ * correcting it has to be cheaper than the guess was — one touch, on the chip,
+ * rather than a trip through a dialog.
+ */
+.menu-chip__course {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0 1rem 0 0.15rem;
+  font-size: 0.7rem;
+  color: var(--bs-secondary-color);
+  background-color: transparent;
+  border: 0;
+  appearance: none;
+  background-image: var(--bs-form-select-bg-img);
+  background-repeat: no-repeat;
+  background-position: right 0.1rem center;
+  background-size: 0.7rem;
+  cursor: pointer;
+}
+
+.menu-chip__remove,
+.menu-item__remove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  color: var(--bs-secondary-color);
+  background: none;
+  border: 0;
+  border-radius: 0.2rem;
+  cursor: pointer;
+}
+
+.menu-chip__remove:hover,
+.menu-item__remove:hover {
+  color: var(--bs-danger);
+  background-color: var(--bs-danger-bg-subtle);
+}
+
+/* --- The rail: wishlist above, library below ----------------------------- */
+
+.menu-page__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.menu-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.35rem;
+}
+
+/*
+ * The wishlist takes what it needs and the library takes the rest: a household
+ * has three or four wishes and forty dishes, and giving them equal halves
+ * would scroll the list you search while the one you glance at sits empty.
+ */
+.menu-panel--wish {
+  flex: 0 1 auto;
+  max-height: 45%;
+  border-color: var(--bs-primary-border-subtle);
+}
+
+.menu-panel--library {
+  flex: 1 1 auto;
+}
+
+.menu-panel--open {
+  border-style: dashed;
+  border-color: var(--bs-primary);
+}
+
+.menu-panel--hover {
+  border-style: solid;
+  border-color: var(--bs-primary);
+  background-color: var(--bs-primary-bg-subtle);
+}
+
+.menu-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--bs-secondary-color);
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.menu-panel__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-panel__action {
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.menu-panel__as {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.78rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.menu-panel__as > span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.menu-panel__as .form-select {
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+}
+
+.menu-panel__search {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.menu-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem;
+}
+
+.menu-panel__hint {
+  margin: 0;
+  padding: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+}
+
+.menu-panel__drop {
+  padding: 0.35rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--bs-primary);
+  border: 1px dashed var(--bs-primary);
+  border-radius: 0.25rem;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.2rem 0.3rem 0.4rem;
+  font-size: 0.88rem;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.25rem;
+  cursor: grab;
+}
+
+.menu-item--held {
+  opacity: 0.4;
+}
+
+.menu-item__icon {
+  flex: 0 0 auto;
+}
+
+.menu-item__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * When a dish was last cooked. The single most useful thing a menu planner can
+ * say — it is what stops a family eating the same thing three Tuesdays running
+ * — so it earns a permanent place on every row rather than a hover title.
+ */
+.menu-item__meta {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+.menu-item__person {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.68rem;
+  color: #fff;
+  background-color: var(--bs-secondary);
+  border-radius: 1rem;
+  white-space: nowrap;
+}
+
+.menu-item__edit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  border-radius: 0.2rem;
+}
+
+.menu-item__edit:hover {
+  color: var(--bs-primary);
+  background-color: var(--bs-primary-bg-subtle);
+}
+
+/*
+ * The dish under the finger during a drag.
+ *
+ * Fixed and pointer-transparent: it follows the hand across panels that clip
+ * their own contents, and it must never become the element under the pointer
+ * or the drop target would resolve to the ghost itself.
+ */
+.menu-ghost {
+  position: fixed;
+  z-index: 1090;
+  transform: translate(-50%, -150%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.9rem;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-primary);
+  border-left-width: 3px;
+  border-radius: 0.25rem;
+  box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.3);
+  rotate: -1.5deg;
+}
+
+/* --- Dish editor --------------------------------------------------------- */
+
+.dish-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 72rem;
+}
+
+.dish-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dish-editor__crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+}
+
+.dish-editor__crumb a {
+  text-decoration: none;
+}
+
+.dish-editor__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.dish-editor__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dish-editor__side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dish-editor__recipe {
+  line-height: 1.6;
+}
+
+.dish-editor__ingredients {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/*
+ * The name gets whatever is left. A quantity is rarely more than three digits
+ * and a unit rarely more than four characters, so fixing both keeps the three
+ * boxes in a column down the card rather than ragged from row to row.
+ */
+.dish-editor__quantity {
+  max-width: 4rem;
+  flex: 0 0 4rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dish-editor__unit {
+  max-width: 5.5rem;
+  flex: 0 0 5.5rem;
+}
+
+@media (max-width: 62rem) {
+  .menu-page__body,
+  .dish-editor__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-page {
+    height: auto;
+    overflow: visible;
+  }
+
+  .menu-week {
+    overflow-x: auto;
   }
 }

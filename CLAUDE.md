@@ -119,14 +119,23 @@ midnight belongs to the earlier day only. One shared bucketing function enforces
 this for both the agenda and the density endpoints — keep it that way, or a dot
 will appear on a day the agenda shows as empty.
 
-**Birthdays are the exception to all of the above.** They live on `person`
-(`birth_month` / `birth_day` / `birth_year`, the year separately nullable) as a
-_civil_ date, not unix seconds — the one place storing an instant would be wrong.
-`util/birthdays.ts` derives which days they fall on per request, so nothing is
-materialised, a steady-state sync still writes nothing, and they are known
+**Birthdays and menus are the exceptions to all of the above.** Both store a
+_civil_ date rather than unix seconds, because both name a day rather than an
+instant — there is no timezone at which someone stops having been born on the
+3rd of March, or at which Wednesday's dinner becomes Tuesday's.
+
+Birthdays live on `birthday` (`birth_month` / `birth_day` / `birth_year`, the
+year separately nullable); `menu_entry.day_key` is a `YYYY-MM-DD` string.
+Neither is materialised: `util/birthdays.ts` and `util/menu.ts` derive the days
+per request, so a steady-state sync still writes nothing and both are known
 outside the occurrence window where feed marks are not. Both agenda endpoints
-call that one function, for the same reason the two queries share a `WHERE`
-builder.
+call those functions, for the same reason the two queries share a `WHERE`
+builder. Neither is narrowed by presence — a birthday belongs to no calendar,
+and dinner is cooked for whoever walks in.
+
+The menu path performs **no timezone conversion at all**: both sides of every
+comparison are already day keys. `test/menu.test.ts` pins that under all four
+CI zones, and a change that makes the assertion non-trivial is a bug.
 
 ## Frontend
 
@@ -134,6 +143,22 @@ builder.
 value on screen while a refresh is in flight, pauses while the tab is hidden,
 re-fetches on wake, and takes an `enabled` flag so parked views stop fetching
 without unmounting.
+
+`/menu` is the planning week: meals down (breakfast / lunch / dinner), days
+across, with a rail holding the wishlist above the dish library. Rows rather
+than meals stacked inside a day column, because that makes every drop target a
+third of a seventh of the screen. `usePlacement` is the one new primitive — a
+Pointer Events state machine where **tap-to-lift-then-tap-to-place is the
+interaction and drag is the shortcut**, not the other way round: a drag across
+a wall-mounted screen is not something everyone in a household can do. Dishes
+are written up on their own route (`/menu/dishes/:id`), remounted per id so a
+half-typed recipe cannot follow you onto the next dish.
+
+A day column carries a `MenuStrip` along its bottom — below the hour grid, not
+in the all-day band, because a meal has no start or end time. It is a fixed
+height reserved across every column at once (`--pical-menu-rows`), exactly like
+the all-day band and for the same reason: a row only some days carried would
+give those days a shorter hour grid than their neighbours.
 
 The dashboard has four views (3 days / week / month / year) sharing one header.
 The first three share a poll and differ only in the range requested — three days
@@ -157,8 +182,9 @@ client can skip a repaint on an unchanged poll.
 bottom — calendar, tasks, menu, custom lists, settings. It is sticky and takes
 real height, and the dashboard sizes itself to the viewport _minus_
 `--pical-nav-height`; keep those two in step or the day grid runs under the bar.
-The admin page is the "Settings" entry, still routed at `/admin`. Tasks, menu
-and lists are `ComingSoon` placeholders.
+The admin page is the "Settings" entry, still routed at `/admin`. Tasks and
+lists are `ComingSoon` placeholders. `Layout`'s `FULL_BLEED` set decides which
+routes skip the padded container — the dashboard and the menu planner.
 
 ## Conventions
 

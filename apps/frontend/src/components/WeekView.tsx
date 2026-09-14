@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
-import type { AgendaDay } from '@picalendar/shared';
+import { byMeal, type AgendaDay, type PlannedDish } from '@picalendar/shared';
 import { DayColumn } from './DayColumn.js';
 import type { SelectOccurrence } from './EventCard.js';
 import { TimeAxis } from './TimeAxis.js';
@@ -13,6 +13,13 @@ import { allDayOccurrences, offscreenCounts } from '../utils/timeline.js';
  */
 const MAX_ALL_DAY_ROWS = 4;
 
+/**
+ * And the same cap on the menu strip along the bottom, for the same reason:
+ * the hour grid is what the wall is for, and a day that planned five courses
+ * must not take the evening off the four days beside it.
+ */
+const MAX_MENU_ROWS = 4;
+
 interface Props {
   days: AgendaDay[];
   timezone: string;
@@ -20,6 +27,7 @@ interface Props {
   /** Key of the block whose detail popup is open. */
   selectedKey: string | null;
   onSelect: SelectOccurrence;
+  onOpenRecipe: (dish: PlannedDish) => void;
 }
 
 /**
@@ -27,7 +35,14 @@ interface Props {
  * default shape, whether it is showing three days or eight, and the only view
  * that shows an event's name and hour without being asked.
  */
-export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props): JSX.Element {
+export function WeekView({
+  days,
+  timezone,
+  now,
+  selectedKey,
+  onSelect,
+  onOpenRecipe,
+}: Props): JSX.Element {
   // One scale for the whole board — a fixed twelve hours, pannable — so a day
   // is read by height alone and 09:00 is at the same height in every column.
   const { timeWindow, pan, canPanEarlier, canPanLater } = useTimeWindow();
@@ -52,14 +67,36 @@ export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props):
     [days],
   );
 
+  // The strip is reserved across every column or not at all, exactly like the
+  // band above: a row only some days carry would leave those days a shorter
+  // hour grid than their neighbours, and the shared scale would stop matching.
+  const menuRows = useMemo(
+    () =>
+      Math.min(
+        Math.max(
+          0,
+          ...days.map((day) => {
+            const groups = byMeal(day.menu);
+            // The meal name only takes a row when more than one meal is planned,
+            // which is what MenuStrip renders.
+            const labels = groups.length > 1 ? groups.length : 0;
+            return day.menu.length + labels;
+          }),
+        ),
+        MAX_MENU_ROWS,
+      ),
+    [days],
+  );
+
   return (
     <div
       className="dashboard__grid flex-grow-1 px-3 pb-3"
-      style={{ '--pical-allday-rows': allDayRows } as CSSProperties}
+      style={{ '--pical-allday-rows': allDayRows, '--pical-menu-rows': menuRows } as CSSProperties}
     >
       <TimeAxis
         timeWindow={timeWindow}
         showAllDayBand={allDayRows > 0}
+        showMenuStrip={menuRows > 0}
         offscreen={offscreen}
         canPanEarlier={canPanEarlier}
         canPanLater={canPanLater}
@@ -76,6 +113,8 @@ export function WeekView({ days, timezone, now, selectedKey, onSelect }: Props):
           panHandlers={panHandlers}
           selectedKey={selectedKey}
           onSelect={onSelect}
+          showMenuStrip={menuRows > 0}
+          onOpenRecipe={onOpenRecipe}
         />
       ))}
     </div>

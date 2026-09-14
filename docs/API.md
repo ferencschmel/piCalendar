@@ -88,16 +88,29 @@ exists — every enabled calendar is shown.
           "people": []
         }
       ],
-      "birthdays": []
+      "birthdays": [],
+      "menu": [
+        {
+          "entryId": "e4…",
+          "dishId": "d7…",
+          "name": "Gulyás",
+          "meal": "dinner",
+          "course": "main",
+          "icon": "bi-fire",
+          "color": "#b4472a",
+          "note": null,
+          "hasRecipe": true
+        }
+      ]
     }
   ]
 }
 ```
 
-`revision` changes when ingest wrote something, and when a person record was
-added, edited or removed — birthdays are not ingested, so a client that skips
-repaints on an unchanged revision would otherwise miss them. Compare it across
-polls to decide whether a re-render is warranted.
+`revision` changes when ingest wrote something, when a birthday record was
+added, edited or removed, and when a menu did — neither is ingested, so a client
+that skips repaints on an unchanged revision would otherwise miss them. Compare
+it across polls to decide whether a re-render is warranted.
 
 A multi-day event appears under **every** day it covers. One ending exactly at
 midnight belongs to the earlier day only.
@@ -286,6 +299,153 @@ way to clear it, since a birthday without a date is not a record.
 `icon` is a Bootstrap Icons class name matching `bi-[a-z0-9-]+` (default
 `bi-cake2`); `color` tints the entry on the calendar (default `#d63384`).
 `active: false` keeps the record but takes it off the calendar.
+
+---
+
+## Dishes
+
+The library of what the household knows how to cook. **Not admin-gated**, and
+that is deliberate: `ADMIN_TOKEN` exists to stop a passer-by editing which
+calendars the house subscribes to, while adding a dish at the fridge is the
+interaction this feature is for — and the wall display holds no token.
+
+`GET /api/dishes` → `{ "dishes": [Dish, …] }`, by name, retired ones last.
+
+`GET /api/dishes/:id` → `{ "dish": Dish }`
+
+`POST /api/dishes` — `{ name, recipe?, sourceUrl?, defaultCourse?, icon?, color?, active?, ingredients? }` → **201**
+
+`PATCH /api/dishes/:id` — any subset
+
+`DELETE /api/dishes/:id` → `{ "removed": { "timesCooked": 2, "wishCount": 1 } }`
+
+```json
+{
+  "id": "d7…",
+  "name": "Gulyás",
+  "recipe": "Brown the onions slowly in lard…",
+  "sourceUrl": "https://example.com/gulyas",
+  "defaultCourse": "main",
+  "icon": "bi-fire",
+  "color": "#b4472a",
+  "active": true,
+  "ingredients": [
+    { "name": "Beef shin", "quantity": 500, "unit": "g" },
+    { "name": "Salt", "quantity": null, "unit": "pinch" }
+  ],
+  "lastCookedOn": "2026-09-11",
+  "timesCooked": 2,
+  "wishedBy": [{ "wishId": "w2…", "personId": "p1…", "displayName": "Bea" }],
+  "createdAt": "2026-09-01T10:00:00.000Z",
+  "updatedAt": "2026-09-01T10:00:00.000Z"
+}
+```
+
+`ingredients` is sent **whole** and replaced whole; the array's order is the
+stored position. Omitting it on a `PATCH` leaves the existing set alone, and
+sending `[]` clears it.
+
+`quantity` is nullable rather than defaulted to zero — "salt, a pinch" and
+"parsley, to taste" are real lines, and `0` is not what leaving the number off
+meant. `unit` is **free text** (≤ 20 chars), not an enum: a household measures
+in cloves, tins and bunches, so the editor offers `SUGGESTED_UNITS` (`g`, `kg`,
+`oz`, `lbs`, `ml`, `dl`, `l`, `tsp`, `tbsp`, `cup`, `each`, …) and accepts
+anything.
+
+### `GET /api/dishes/ingredients`
+
+Every distinct ingredient across the whole library, for the editor's
+autocomplete. Commonest first.
+
+```json
+{
+  "ingredients": [
+    { "name": "Onion", "unit": "each", "uses": 7 },
+    { "name": "Beef shin", "unit": "g", "uses": 2 }
+  ]
+}
+```
+
+Names are folded case-insensitively, so "Onion" and "onion" are one suggestion
+— the list exists to stop a library growing three unrelated spellings of the
+same thing, and would defeat itself by offering them.
+
+`unit` is the most-used **non-empty** unit for that name: a blank is the absence
+of an answer rather than an answer, so four unmeasured uses do not outvote the
+one dish that says grams. The editor fills it in when a known name is chosen,
+but only into a blank unit field, so it never overwrites a deliberate choice.
+
+> Registered before `/api/dishes/:id`. Express matches in order, and the
+> parameterised route would otherwise look for a dish called "ingredients".
+
+`lastCookedOn`, `timesCooked` and `wishedBy` are derived, never stored.
+
+A duplicate `name` answers **409** with the existing dish in the body, so a
+client can offer to open it rather than leaving the cook retyping. `active:
+false` retires a dish: it keeps every evening it was served on but drops out of
+the planner. Deleting cascades to those evenings, which is why the response says
+what it took.
+
+---
+
+## Menu
+
+What is planned to be eaten, and the wishlist it gets planned from. Open, for
+the same reason Dishes are.
+
+| Route                         | Body                                                 | Notes                                              |
+| ----------------------------- | ---------------------------------------------------- | -------------------------------------------------- |
+| `GET /api/menu?start=&days=`  | —                                                    | `start` defaults to today, `days` 1–31 (default 7) |
+| `POST /api/menu`              | `{ dayKey, dishId, meal?, course?, note?, wishId? }` | **201**                                            |
+| `PATCH /api/menu/:id`         | `{ dayKey?, meal?, course?, note? }`                 | Moving days or meals                               |
+| `DELETE /api/menu/:id`        | —                                                    | **204**                                            |
+| `GET /api/menu/wishes`        | —                                                    | Newest first                                       |
+| `POST /api/menu/wishes`       | `{ dishId, personId?, note? }`                       | **201**, or **200** if already wished              |
+| `DELETE /api/menu/wishes/:id` | —                                                    | **204**                                            |
+
+```json
+{
+  "generatedAt": "2026-09-13T16:48:22.001Z",
+  "timezone": "Europe/Budapest",
+  "revision": "8.1789325161.1789325160",
+  "days": [
+    {
+      "date": "2026-09-14",
+      "isToday": true,
+      "entries": [{ "entryId": "e4…", "name": "Gulyás", "meal": "dinner", "course": "main" }]
+    }
+  ]
+}
+```
+
+`dayKey` is a `YYYY-MM-DD` **civil date**, not an instant: Wednesday's dinner is
+Wednesday's dinner in every timezone, and nothing on the server converts one.
+This also means a menu is readable for any date, not only inside the occurrence
+window that bounds feed events.
+
+`meal` is `breakfast` | `lunch` | `dinner` (default `dinner`) and `course` is
+`starter` | `soup` | `main` | `side` | `dessert` | `drink`. Omitting `course`
+takes the dish's own `defaultCourse`, so planning is one decision rather than
+two. Entries come back in serving order — meal, then course — whatever order
+they were planned in.
+
+Passing `wishId` to `POST /api/menu` **fulfils that wish in the same
+transaction**: a planned dish still sitting on the wishlist would read as
+"nobody has acted on this".
+
+The same dish on as many **days** as a household likes is ordinary — a pot of
+something eaten on Monday and again on Thursday — and so is the same dish at a
+different **meal** on the same day. Neither is a conflict and neither is
+refused.
+
+The same dish at the _same_ sitting twice is a second tap, not an intention, so
+it comes back as the entry that is already there: **200** with
+`alreadyPlanned: true`, never an error. Nothing the person asked for is missing
+— the dish is planned — so there is nothing to warn about. Wishing twice
+behaves the same way, with `alreadyWished: true`.
+
+`PATCH` is how a dish moves between days, so the entry keeps its identity and a
+failed move cannot leave it on neither day.
 
 ---
 

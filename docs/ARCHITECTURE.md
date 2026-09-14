@@ -47,9 +47,9 @@ piCalendar/
 │   ├── src/routes/           # thin HTTP layer over the repositories
 │   └── test/
 ├── apps/frontend/
-│   ├── src/pages/            # DashboardPage, AdminPage
-│   ├── src/components/       # DayColumn, EventCard, FeedForm, BirthdaysPanel
-│   └── src/hooks/            # usePolling, useClock
+│   ├── src/pages/            # DashboardPage, MenuPage, DishEditorPage, AdminPage
+│   ├── src/components/       # DayColumn, EventCard, FeedForm, MenuWeek
+│   └── src/hooks/            # usePolling, useClock, usePlacement
 ├── deploy/                   # systemd unit, install script, kiosk notes
 ├── docs/
 └── .github/workflows/        # ci.yml, deploy.yml
@@ -165,6 +165,51 @@ Both endpoints call the same bucketing function, for the same reason the two
 queries share a `WHERE` builder. A 29 February birthday is observed on the 28th
 in a common year and says so, and birthdays are deliberately **not** narrowed by
 presence: whose day it is does not depend on who is in the room.
+
+### Menus are the second civil date
+
+`GET /api/agenda` also returns a `menu` array per day: what the household has
+planned to eat. Four tables carry it — `dish` and its `dish_ingredient` rows are
+the library, `menu_wish` is the wishlist, and `menu_entry` is a dish planned for
+a meal on a day.
+
+`menu_entry.day_key` is a `YYYY-MM-DD` string, not unix seconds, and it is the
+only other place in the schema that departs from the storage rule. The reasoning
+is the birthdays' exactly: Wednesday's dinner is Wednesday's dinner, and
+anchoring it to an instant would have a display east of UTC serving it on
+Tuesday. Because both sides of the comparison are day keys, **no timezone
+conversion happens in the menu path at all** — `util/menu.ts` compares strings,
+and `test/menu.test.ts` pins that under all four CI zones.
+
+The same three properties follow as for birthdays: a steady-state sync writes
+nothing (ingest never touches these tables — only a person planning a meal
+does), a menu is known outside the occurrence window, and there is no zone
+maths to get wrong. Menus are **not** narrowed by presence either: dinner is
+cooked for whoever walks in.
+
+A day is two axes, not a flat list. `meal` says when it is eaten
+(breakfast / lunch / dinner) and `course` says what it is within that meal
+(starter / soup / main / side / dessert / drink). Both vocabularies live in
+`packages/shared/src/menu.ts`, and the array order there _is_ the serving order
+the dashboard sorts by — so the SQL `CHECK` constraints, the course picker and
+the comparator cannot drift apart. Uniqueness is scoped `(day_key, meal,
+dish_id)` rather than to the day, because yesterday's stew reheated for lunch
+and served again at dinner is a real plan; a repeat within one sitting is a
+double-tap and answers 409.
+
+Ingredients carry a nullable `quantity` and a free-text `unit`. Structured
+enough that the editor can suggest the unit an ingredient is usually measured
+in — `GET /api/dishes/ingredients` folds the library's distinct names
+case-insensitively and reports each one's most-used non-empty unit, which is
+what stops "Onion", "onion" and "Brown onion" becoming three unrelated things.
+Not an enum, because a household measures in cloves, tins and bunches and a
+`CHECK` constraint would reject the ingredient rather than the typo.
+
+`AgendaDensityDay` deliberately gains nothing. Density feeds the year grid only,
+where a day is the area of a fingernail and already carries feed marks and a
+birthday — a fork glyph at that scale is noise. The density `revision` still
+includes the menu token, so a client sharing it across views cannot skip a
+repaint it needed.
 
 ## Frontend
 

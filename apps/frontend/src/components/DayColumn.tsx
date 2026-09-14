@@ -1,6 +1,7 @@
-import type { AgendaDay } from '@picalendar/shared';
+import type { AgendaDay, PlannedDish } from '@picalendar/shared';
 import type { PanHandlers } from '../hooks/useTimeWindow.js';
 import { BirthdayChip } from './BirthdayChip.js';
+import { MenuStrip } from './MenuStrip.js';
 import { AllDayChip, EventCard, type SelectOccurrence } from './EventCard.js';
 import {
   allDayOccurrences,
@@ -27,6 +28,14 @@ interface Props {
   /** Key of the block whose detail popup is open, if it is one of this day's. */
   selectedKey: string | null;
   onSelect: SelectOccurrence;
+  /**
+   * Whether any day on screen has a menu, so the strip is reserved across the
+   * whole grid. Like the all-day band: a row that only some columns carry
+   * would give those days a shorter hour grid than the ones beside them, and
+   * the shared time scale would stop being shared.
+   */
+  showMenuStrip: boolean;
+  onOpenRecipe: (dish: PlannedDish) => void;
 }
 
 /** Gutter between two events that share a time slot. */
@@ -41,6 +50,8 @@ export function DayColumn({
   panHandlers,
   selectedKey,
   onSelect,
+  showMenuStrip,
+  onOpenRecipe,
 }: Props): JSX.Element {
   const date = new Date(`${day.date}T12:00:00Z`);
   const weekday = date.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
@@ -145,6 +156,8 @@ export function DayColumn({
           <p className="timeline__empty text-body-secondary small fst-italic">Nothing scheduled</p>
         )}
       </div>
+
+      {showMenuStrip && <MenuStrip menu={day.menu} onOpen={onOpenRecipe} />}
     </section>
   );
 }

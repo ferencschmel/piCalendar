@@ -1,5 +1,10 @@
 import { useMemo } from 'react';
-import type { AgendaDay, BirthdayCelebration, CalendarOccurrence } from '@picalendar/shared';
+import type {
+  AgendaDay,
+  BirthdayCelebration,
+  CalendarOccurrence,
+  PlannedDish,
+} from '@picalendar/shared';
 import { BirthdayChip } from './BirthdayChip.js';
 import type { SelectOccurrence } from './EventCard.js';
 import { timeLabel } from '../utils/datetime.js';
@@ -31,8 +36,16 @@ interface Props {
  */
 const MAX_DOTS = 10;
 
+/**
+ * Dishes named in a month cell before the rest become a count. Two fits the
+ * common case — a main and a pudding — without the text crowding out the dots
+ * that tell the cell's main story.
+ */
+const MAX_MENU_LINES = 2;
+
 /** Stable empty array, so a cell without a response does not remount its row. */
 const NO_BIRTHDAYS: BirthdayCelebration[] = [];
+const NO_MENU: PlannedDish[] = [];
 
 /** `09:30 · Swim practice`, or `All day · Half term`. */
 function dotTitle(occurrence: CalendarOccurrence, timezone: string): string {
@@ -45,6 +58,7 @@ function MonthCell({
   anchor,
   occurrences,
   birthdays,
+  menu,
   isToday,
   timezone,
   now,
@@ -55,6 +69,7 @@ function MonthCell({
   anchor: MonthAnchor;
   occurrences: CalendarOccurrence[];
   birthdays: BirthdayCelebration[];
+  menu: PlannedDish[];
   isToday: boolean;
   timezone: string;
   now: Date;
@@ -80,6 +95,23 @@ function MonthCell({
           {birthdays.map((celebration) => (
             <BirthdayChip key={celebration.birthdayId} celebration={celebration} />
           ))}
+        </div>
+      )}
+
+      {/* Below the birthdays and above the dots: a month grid is read as "how
+          busy", and what is for dinner is the one piece of plain text at this
+          scale that answers a different question worth answering. */}
+      {menu.length > 0 && (
+        <div className="month-cell__menu">
+          {menu.slice(0, MAX_MENU_LINES).map((dish) => (
+            <span key={dish.entryId} className="month-cell__dish" title={dish.name}>
+              <i className={`bi ${dish.icon}`} style={{ color: dish.color }} aria-hidden="true" />
+              {dish.name}
+            </span>
+          ))}
+          {menu.length > MAX_MENU_LINES && (
+            <span className="month-cell__more">+{menu.length - MAX_MENU_LINES}</span>
+          )}
         </div>
       )}
 
@@ -164,6 +196,7 @@ export function MonthView({
               anchor={anchor}
               occurrences={day?.occurrences ?? []}
               birthdays={day?.birthdays ?? NO_BIRTHDAYS}
+              menu={day?.menu ?? NO_MENU}
               isToday={dayKey === todayKey}
               timezone={timezone}
               now={now}

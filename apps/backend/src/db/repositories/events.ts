@@ -3,6 +3,7 @@ import type {
   AgendaDensityDay,
   BirthdayCelebration,
   CalendarOccurrence,
+  PlannedDish,
 } from '@picalendar/shared';
 import type { Db } from '../index.js';
 import type { NormalizedEvent } from '../../ingest/types.js';
@@ -345,6 +346,7 @@ function spreadAcrossDays<T extends Spanning>(
 
 /** No birthdays, for callers that only care about ingested events. */
 const NO_BIRTHDAYS: ReadonlyMap<string, BirthdayCelebration[]> = new Map();
+const NO_MENU: ReadonlyMap<string, PlannedDish[]> = new Map();
 
 /** Bucket occurrences into the dashboard's day columns. */
 export function groupByDay(
@@ -353,6 +355,7 @@ export function groupByDay(
   timezone: string,
   todayKey: string,
   birthdays: ReadonlyMap<string, BirthdayCelebration[]> = NO_BIRTHDAYS,
+  menu: ReadonlyMap<string, PlannedDish[]> = NO_MENU,
 ): AgendaDay[] {
   const buckets = spreadAcrossDays(occurrences, dayKeys, timezone);
 
@@ -361,6 +364,7 @@ export function groupByDay(
     isToday: date === todayKey,
     occurrences: buckets.get(date) ?? [],
     birthdays: birthdays.get(date) ?? [],
+    menu: menu.get(date) ?? [],
   }));
 }
 

@@ -14,9 +14,11 @@ import {
   queryOccurrenceDensity,
 } from '../db/repositories/events.js';
 import { birthdayRevision, listActiveBirthdays } from '../db/repositories/birthdays.js';
+import { listEntries, menuRevision } from '../db/repositories/menu.js';
 import { getAgendaRevision } from '../db/repositories/settings.js';
 import { getPresenceState } from '../db/repositories/presence.js';
 import { celebrationsByDay } from '../util/birthdays.js';
+import { entriesByDay } from '../util/menu.js';
 import { dayKeyRange, dayStartEpoch, nowEpoch, toDayKey } from '../util/time.js';
 
 export const agendaRouter: Router = Router();
@@ -67,15 +69,26 @@ agendaRouter.get('/', (req, res) => {
   // never in the room and her birthday still belongs on the display.
   const birthdays = celebrationsByDay(listActiveBirthdays(db), dayKeys);
 
+  // Not narrowed by `personIds` either, and for the birthdays' reason: dinner
+  // is cooked for whoever walks in, not for whoever the camera can see.
+  const menu = entriesByDay(listEntries(db, startKey, dayKeys.at(-1)!), dayKeys);
+
   const response: AgendaResponse = {
     generatedAt: new Date().toISOString(),
     rangeStart: new Date(rangeStart * 1000).toISOString(),
     rangeEnd: new Date(rangeEnd * 1000).toISOString(),
     timezone,
-    days: groupByDay(occurrences, dayKeys, timezone, toDayKey(nowEpoch(), timezone), birthdays),
-    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${startKey}:${query.days}:${
-      personIds?.join(',') ?? 'all'
-    }`,
+    days: groupByDay(
+      occurrences,
+      dayKeys,
+      timezone,
+      toDayKey(nowEpoch(), timezone),
+      birthdays,
+      menu,
+    ),
+    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${menuRevision(db)}:${startKey}:${
+      query.days
+    }:${personIds?.join(',') ?? 'all'}`,
   };
 
   // The dashboard polls this every minute; a short cache keeps a reloading
@@ -125,9 +138,9 @@ agendaRouter.get('/density', (req, res) => {
     coverageStart: new Date(coverageStart * 1000).toISOString(),
     coverageEnd: new Date(coverageEnd * 1000).toISOString(),
     days: groupDensityByDay(rows, dayKeys, timezone, toDayKey(now, timezone), birthdays),
-    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${startKey}:${query.days}:${
-      personIds?.join(',') ?? 'all'
-    }`,
+    revision: `${getAgendaRevision(db)}:${birthdayRevision(db)}:${menuRevision(db)}:${startKey}:${
+      query.days
+    }:${personIds?.join(',') ?? 'all'}`,
   };
 
   res.set('Cache-Control', 'no-cache');

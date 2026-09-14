@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { BirthdayCelebration } from './birthdays.js';
+import type { PlannedDish } from './menu.js';
 
 /**
  * A single materialised occurrence of an event — a recurring event yields one
@@ -40,6 +41,18 @@ export interface AgendaDay {
    * above everything else.
    */
   birthdays: BirthdayCelebration[];
+  /**
+   * What is planned to be eaten, in meal then course order.
+   *
+   * Kept apart from `occurrences` for the same reason birthdays are: a meal
+   * belongs to no feed, has no start or end time, and wants no slot on the
+   * hour grid. The day column gives it a strip of its own along the bottom.
+   *
+   * Not narrowed by presence, and for the same reason birthdays are not:
+   * presence selects whose *calendars* are worth the wall's attention, and
+   * dinner is cooked for whoever walks in.
+   */
+  menu: PlannedDish[];
 }
 
 export interface AgendaResponse {

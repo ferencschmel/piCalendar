@@ -5,14 +5,24 @@ import type {
   Birthday,
   BirthdayInputPayload,
   BirthdayUpdatePayload,
+  Dish,
+  DishInputPayload,
+  DishUpdatePayload,
   Feed,
   FeedInput,
   FeedUpdate,
   HealthResponse,
+  IngredientSuggestion,
+  MenuEntryInputPayload,
+  MenuEntryUpdatePayload,
+  MenuResponse,
   Person,
   PersonInput,
+  PlannedDish,
   PresenceState,
   SyncRun,
+  Wish,
+  WishInputPayload,
 } from '@picalendar/shared';
 
 /** Same-origin in production; the Vite dev server proxies /api in development. */
@@ -107,6 +117,53 @@ export const api = {
       body: JSON.stringify(patch),
     }).then((r) => r.birthday),
   deleteBirthday: (id: string) => request<void>(`/birthdays/${id}`, { method: 'DELETE' }),
+
+  listDishes: () => request<{ dishes: Dish[] }>('/dishes').then((r) => r.dishes),
+  getDish: (id: string) => request<{ dish: Dish }>(`/dishes/${id}`).then((r) => r.dish),
+  /** Distinct ingredients across every dish, commonest first. */
+  listIngredientSuggestions: () =>
+    request<{ ingredients: IngredientSuggestion[] }>('/dishes/ingredients').then(
+      (r) => r.ingredients,
+    ),
+  createDish: (input: DishInputPayload) =>
+    request<{ dish: Dish }>('/dishes', { method: 'POST', body: JSON.stringify(input) }).then(
+      (r) => r.dish,
+    ),
+  updateDish: (id: string, patch: DishUpdatePayload) =>
+    request<{ dish: Dish }>(`/dishes/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(
+      (r) => r.dish,
+    ),
+  /** Resolves with what the delete took with it, so the page can say so. */
+  deleteDish: (id: string) =>
+    request<{ removed: { timesCooked: number; wishCount: number } }>(`/dishes/${id}`, {
+      method: 'DELETE',
+    }).then((r) => r.removed),
+
+  menu: (params: { start?: string; days?: number } = {}) => {
+    const search = new URLSearchParams();
+    if (params.start) search.set('start', params.start);
+    if (params.days) search.set('days', String(params.days));
+    const query = search.toString();
+    return request<MenuResponse>(`/menu${query ? `?${query}` : ''}`);
+  },
+  planDish: (input: MenuEntryInputPayload) =>
+    request<{ entry: PlannedDish }>('/menu', { method: 'POST', body: JSON.stringify(input) }).then(
+      (r) => r.entry,
+    ),
+  /** Moving between days or meals is a patch, so the entry keeps its identity. */
+  moveEntry: (id: string, patch: MenuEntryUpdatePayload) =>
+    request<{ entry: PlannedDish }>(`/menu/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }).then((r) => r.entry),
+  unplanEntry: (id: string) => request<void>(`/menu/${id}`, { method: 'DELETE' }),
+
+  listWishes: () => request<{ wishes: Wish[] }>('/menu/wishes').then((r) => r.wishes),
+  createWish: (input: WishInputPayload) =>
+    request<{ wish: Wish }>('/menu/wishes', { method: 'POST', body: JSON.stringify(input) }).then(
+      (r) => r.wish,
+    ),
+  deleteWish: (id: string) => request<void>(`/menu/wishes/${id}`, { method: 'DELETE' }),
 
   listFeeds: () => request<{ feeds: Feed[] }>('/feeds').then((r) => r.feeds),
   getFeed: (id: string) => request<{ feed: Feed; recentRuns: SyncRun[] }>(`/feeds/${id}`),
