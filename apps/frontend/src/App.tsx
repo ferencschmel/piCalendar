@@ -5,6 +5,8 @@ import { TasksPage } from './pages/TasksPage.js';
 import { MenuPage } from './pages/MenuPage.js';
 import { DishEditorPage } from './pages/DishEditorPage.js';
 import { ListsPage } from './pages/ListsPage.js';
+import { GroceryListPage } from './pages/GroceryListPage.js';
+import { CustomListPage } from './pages/CustomListPage.js';
 import { AdminPage } from './pages/AdminPage.js';
 import { NotFoundPage } from './pages/NotFoundPage.js';
 
@@ -20,6 +22,11 @@ export function App(): JSX.Element {
         <Route path="menu/dishes/new" element={<DishEditorPage />} />
         <Route path="menu/dishes/:id" element={<DishEditorPage />} />
         <Route path="lists" element={<ListsPage />} />
+        {/* Before the parameterised route: the grocery list is derived from
+            the menu rather than stored, so there is no list row with this id
+            for `:id` to find. */}
+        <Route path="lists/grocery" element={<GroceryListPage />} />
+        <Route path="lists/:id" element={<CustomListPage />} />
         {/* Reached as "Settings" in the nav; the path predates the word and is
             what the docs and any bookmarked link still use. */}
         <Route path="admin" element={<AdminPage />} />

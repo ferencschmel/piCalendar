@@ -211,6 +211,78 @@ birthday — a fork glyph at that scale is noise. The density `revision` still
 includes the menu token, so a client sharing it across views cannot skip a
 repaint it needed.
 
+### The grocery list is derived, and its ticks are signed
+
+`/lists` holds the household's lists. The first card is always the **grocery
+list**, and it is the only one with no rows behind it: it is every ingredient of
+every dish planned in a chosen window, added up and recomputed on each request.
+
+That is the same decision birthdays and menus take, one step further on. A
+stored copy would be a second answer to the question the menu already answers,
+and it would need invalidating on every entry write, every dish edit and every
+ingredient change. Deriving it means a steady-state sync still writes nothing,
+and the list cannot disagree with the meal plan — because there is nothing for
+it to disagree with.
+
+It also means the grocery list is not editable, and the API enforces that
+structurally rather than by a flag: its id is the literal string `grocery`,
+there is no `list` row with that id, so `PATCH`, `DELETE` and the item routes
+answer 404 without a single check. A line typed on top of a derived list would
+be a second answer that silently wins, and anything else the shop needs belongs
+on a list of its own — which is what the other cards are for.
+
+Summing happens in `packages/shared/src/lists.ts` and converts **within** a unit
+scale but never across systems. `500 g` plus `1 kg` is `1.5 kg`; grams and
+ounces stay as two parts, because which answer is right depends on whose kitchen
+it is. An unrecognised unit is not an error — it groups under its own spelling,
+which is what "3 cloves" and "2 tins" wanted anyway. Ingredient names fold
+case-insensitively, the same fold `GET /api/dishes/ingredients` uses.
+
+Each line carries `lastNeededOn`: the last day a meal calls for it. That is the
+number the shopper actually needs, and it is why the field exists at all — it is
+how long the thing has to keep, and therefore whether to buy the fish fresh
+today, buy it frozen, or come back. Nothing in this path converts a day key;
+both sides of every comparison are already keys, exactly as in the menu path,
+and `test/lists.test.ts` pins that under all four CI zones.
+
+The one thing a person can do to the list is tick a line, and `grocery_check` is
+where that goes. A derived line has no id, so the key is the folded name — and
+the row stores a **signature**: the amount, and `lastNeededOn`. A tick means "I
+have bought this", and what was bought is an amount for a set of days. Plan
+another meal, or shop for a longer window, and the signature no longer matches,
+so the line comes back unticked. That errs towards asking a shopper to look
+twice, which is the safe direction: an unexplained tick against an amount nobody
+bought is how a household ends up at Saturday with half the fish.
+
+The signature is derived on the server and never taken from the request, so a
+client cannot tick an item against an amount nobody has seen. The rows have no
+owning record to be cascaded away by — a line stops existing the moment its meal
+is eaten — so they are pruned by age whenever one is written.
+
+On the client this is the one place the optimistic-update problem has teeth. A
+tick has to appear under the finger that made it, but the server is _entitled to
+disagree_ with a tick it accepted, because the list it was made against may no
+longer be the list on screen. `usePendingTicks` therefore holds an unconfirmed
+tick in two stages: unconditionally while the request is in flight, so a poll
+already on its way cannot flick the box back, and then only until the next poll
+lands, whatever that poll says. An overlay that waited for the server to _agree_
+would wait forever and show a line as bought that the shop still has to be
+walked for.
+
+Custom lists are ordinary rows — `list` and `list_item`, the item carrying the
+same nullable `quantity` and free-text `unit` a recipe line does, because "2 kg
+potatoes" is the same thought whether it was typed onto a list or read off a
+recipe. Their items stay in the order they were written; only the grocery list
+sinks what has been ticked, because it is regenerated and cannot be reordered by
+hand, so sinking is the only organisation it has.
+
+These pages are also the one part of the app **not** read from across a room.
+They are held in a hand, in a shop, by somebody who is not carrying the wall
+display with them — so the column is capped at 40rem, the whole row is the tick
+target rather than the checkbox inside it, the day picker offers fixed options
+instead of a number field, and the header, day picker and add form stay stuck to
+the top while the list scrolls under them.
+
 ## Frontend
 
 React 18 + Bootstrap 5, built by Vite, served as static files by the backend.
@@ -230,9 +302,9 @@ floating over the page, and the dashboard subtracts that height from the
 viewport (`--pical-nav-height`) — nothing on an unattended display may end up
 underneath chrome nobody can scroll out from behind.
 
-Tasks, menu and custom lists are placeholders for now, and say so on the page
-rather than showing an empty shell: a blank page is indistinguishable from one
-that failed to load. Settings is the admin page, still routed at `/admin`.
+Tasks is a placeholder for now, and says so on the page rather than showing an
+empty shell: a blank page is indistinguishable from one that failed to load.
+Settings is the admin page, still routed at `/admin`.
 
 Inside the dashboard's own header, the view switcher and — off the week view —
 a period stepper sit between the clock and the sync status, the one part of the

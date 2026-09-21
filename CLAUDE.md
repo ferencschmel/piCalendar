@@ -137,6 +137,24 @@ The menu path performs **no timezone conversion at all**: both sides of every
 comparison are already day keys. `test/menu.test.ts` pins that under all four
 CI zones, and a change that makes the assertion non-trivial is a bug.
 
+The **grocery list inherits all of this**. It is derived from `menu_entry` on
+every request — every planned dish's ingredients, summed — so it is not stored,
+not editable, and has no id but the literal string `grocery`; the mutating list
+routes answer 404 for it without a check, because there is no row. Its dates are
+day keys end to end and `test/lists.test.ts` pins that under the same four
+zones. Summing (`packages/shared/src/lists.ts`) converts within a unit scale and
+never across systems — `500 g` + `1 kg` is `1.5 kg`, grams and ounces stay two
+parts — and unknown units group under their own spelling rather than erroring.
+
+Ticking a derived line is the one write, and `grocery_check` stores a
+**signature** with it: the amount, and the last day it is needed. Change what is
+needed and the tick falls away, because a tick against an amount nobody bought
+is worse than an extra tick. The signature is always derived server-side, never
+taken from the request. On the client, `usePendingTicks` holds an unconfirmed
+tick unconditionally while the request is in flight and only until the next poll
+afterwards — an overlay that waited for the server to _agree_ would wait forever,
+since the server is entitled to disagree with a tick it accepted.
+
 ## Frontend
 
 `usePolling` is the entire data layer — no query library. It keeps the last good
@@ -182,9 +200,16 @@ client can skip a repaint on an unchanged poll.
 bottom — calendar, tasks, menu, custom lists, settings. It is sticky and takes
 real height, and the dashboard sizes itself to the viewport _minus_
 `--pical-nav-height`; keep those two in step or the day grid runs under the bar.
-The admin page is the "Settings" entry, still routed at `/admin`. Tasks and
-lists are `ComingSoon` placeholders. `Layout`'s `FULL_BLEED` set decides which
-routes skip the padded container — the dashboard and the menu planner.
+The admin page is the "Settings" entry, still routed at `/admin`. Tasks is the
+last `ComingSoon` placeholder. `Layout`'s `FULL_BLEED` set decides which routes
+skip the padded container — the dashboard and the menu planner.
+
+`/lists` is the one part of the app **not** read from across a room: it is held
+in a hand, in a shop, by somebody who is not carrying the wall display with
+them. Hence a 40rem column, the whole row as the tick target rather than the
+checkbox inside it, fixed day options instead of a number field, and a sticky
+header so the window and the add form are never scrolled away from. Keep new
+work on these pages sized for a thumb, not for viewing distance.
 
 ## Conventions
 

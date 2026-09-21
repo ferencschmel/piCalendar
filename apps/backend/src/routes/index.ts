@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { agendaRouter } from './agenda.js';
 import { birthdaysRouter } from './birthdays.js';
 import { dishesRouter } from './dishes.js';
+import { listsRouter } from './lists.js';
 import { menuRouter } from './menu.js';
 import { feedsRouter } from './feeds.js';
 import { healthRouter } from './health.js';
@@ -14,6 +15,7 @@ export function createApiRouter(): Router {
   router.use('/agenda', agendaRouter);
   router.use('/birthdays', birthdaysRouter);
   router.use('/dishes', dishesRouter);
+  router.use('/lists', listsRouter);
   router.use('/menu', menuRouter);
   router.use('/feeds', feedsRouter);
   router.use('/people', peopleRouter);

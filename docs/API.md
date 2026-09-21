@@ -449,6 +449,84 @@ failed move cannot leave it on neither day.
 
 ---
 
+## Lists
+
+The grocery list, and whatever else the household writes down. Open, for the
+same reason Dishes and Menu are: the phone in the supermarket holds no token.
+
+| Route                                           | Body                                   | Notes                                                |
+| ----------------------------------------------- | -------------------------------------- | ---------------------------------------------------- |
+| `GET /api/lists`                                | —                                      | Card summaries; the grocery list is always first     |
+| `GET /api/lists/grocery?start=&days=`           | —                                      | `start` defaults to today, `days` 1–31 (default 7)   |
+| `POST /api/lists/grocery/checks?start=&days=`   | `{ key, checked }`                     | Ticks one line, returns the refreshed list           |
+| `DELETE /api/lists/grocery/checks?start=&days=` | —                                      | Every tick off, returns the refreshed list           |
+| `GET /api/lists/:id`                            | —                                      | One custom list with its items                       |
+| `POST /api/lists`                               | `{ name }`                             | **201**, or **409** naming the list already there    |
+| `PATCH /api/lists/:id`                          | `{ name? }`                            | Rename                                               |
+| `DELETE /api/lists/:id`                         | —                                      | **204**; cascades to the items                       |
+| `POST /api/lists/:id/items`                     | `{ name, quantity?, unit?, checked? }` | **201**, appended                                    |
+| `PATCH /api/lists/:id/items/:itemId`            | same fields, all optional              | Ticking is a patch of `checked`                      |
+| `DELETE /api/lists/:id/items/:itemId`           | —                                      | **204**                                              |
+| `POST /api/lists/:id/items/clear-checked`       | —                                      | Removes the ticked ones; returns `{ list, removed }` |
+
+### The grocery list is derived
+
+It is **not** a row in `list`. It is the ingredients of every dish planned in
+the window, added up, recomputed on every request — so `id` is the literal
+string `grocery`, the mutating routes above cannot reach it (they answer
+**404**), and there is nothing on it to edit. That is deliberate: a line typed
+on top of it would be a second answer that silently wins over the menu.
+
+```json
+{
+  "generatedAt": "2026-09-14T00:52:21.422Z",
+  "timezone": "Europe/Budapest",
+  "start": "2026-09-14",
+  "end": "2026-09-20",
+  "days": 7,
+  "dishCount": 4,
+  "checkedCount": 1,
+  "items": [
+    {
+      "key": "onion",
+      "name": "Onion",
+      "amounts": [{ "quantity": 11, "unit": "each" }],
+      "amount": "11 each",
+      "firstNeededOn": "2026-09-14",
+      "lastNeededOn": "2026-09-19",
+      "dishes": ["Baked salmon", "Beef stew", "Onion soup"],
+      "checked": false
+    }
+  ]
+}
+```
+
+`lastNeededOn` is the last day a meal calls for the item, and it is the number
+the shopper actually needs: it is how long the thing has to keep, and therefore
+whether to buy the fish fresh today, buy it frozen, or come back. Every date
+here is a civil day key and nothing in this path converts one.
+
+Quantities are summed within a unit scale and never across systems — `500 g`
+plus `1 kg` is `1.5 kg`, but grams and ounces stay as two parts, because which
+answer is right depends on whose kitchen it is. Anything unrecognised groups
+under its own spelling, so `3 clove` and `2 tin` add up sensibly too.
+
+### Ticks
+
+A tick is keyed by the case-folded ingredient name — the only identity a
+derived line has — and is stored with a **signature**: the amount, and
+`lastNeededOn`. A tick means "I have bought this", and what was bought is an
+amount for a set of days. Change either, by planning another meal or by
+shopping for a longer window, and the item comes back **unticked**, because the
+tick no longer describes the line it sits on. That errs towards asking a
+shopper to look twice, which is the safe direction.
+
+The signature is derived on the server from the list as it currently stands and
+is never taken from the request. Ticking a line that is no longer on the list
+is a **404** rather than a silently stored row that matches nothing.
+
+---
+
 ## Presence _(camera, future)_
 
 ### `GET /api/presence`

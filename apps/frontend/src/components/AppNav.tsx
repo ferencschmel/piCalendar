@@ -25,7 +25,7 @@ const ITEMS: NavItem[] = [
   { to: '/', label: 'Calendar', icon: 'calendar3' },
   { to: '/tasks', label: 'Tasks', icon: 'check2-square' },
   { to: '/menu', label: 'Menu', icon: 'egg-fried' },
-  { to: '/lists', label: 'Custom lists', icon: 'list-ul' },
+  { to: '/lists', label: 'Lists', icon: 'list-ul' },
   { to: '/admin', label: 'Settings', icon: 'gear' },
 ];
 

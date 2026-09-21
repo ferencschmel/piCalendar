@@ -8,11 +8,18 @@ import type {
   Dish,
   DishInputPayload,
   DishUpdatePayload,
+  CustomList,
   Feed,
   FeedInput,
   FeedUpdate,
+  GroceryList,
   HealthResponse,
   IngredientSuggestion,
+  ListInputPayload,
+  ListItem,
+  ListItemInputPayload,
+  ListItemUpdatePayload,
+  ListSummary,
   MenuEntryInputPayload,
   MenuEntryUpdatePayload,
   MenuResponse,
@@ -96,6 +103,20 @@ function agendaQuery(params: AgendaParams): string {
   return query ? `?${query}` : '';
 }
 
+/** The window a grocery request shops for. */
+interface GroceryParams {
+  start?: string;
+  days?: number;
+}
+
+function groceryQuery(params: GroceryParams): string {
+  const search = new URLSearchParams();
+  if (params.start) search.set('start', params.start);
+  if (params.days) search.set('days', String(params.days));
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
 export const api = {
   agenda: (params: AgendaParams = {}) => request<AgendaResponse>(`/agenda${agendaQuery(params)}`),
 
@@ -164,6 +185,54 @@ export const api = {
       (r) => r.wish,
     ),
   deleteWish: (id: string) => request<void>(`/menu/wishes/${id}`, { method: 'DELETE' }),
+
+  listLists: () => request<{ lists: ListSummary[] }>('/lists').then((r) => r.lists),
+  getList: (id: string) => request<{ list: CustomList }>(`/lists/${id}`).then((r) => r.list),
+  createList: (input: ListInputPayload) =>
+    request<{ list: CustomList }>('/lists', { method: 'POST', body: JSON.stringify(input) }).then(
+      (r) => r.list,
+    ),
+  renameList: (id: string, name: string) =>
+    request<{ list: CustomList }>(`/lists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }).then((r) => r.list),
+  deleteList: (id: string) => request<void>(`/lists/${id}`, { method: 'DELETE' }),
+
+  addListItem: (listId: string, input: ListItemInputPayload) =>
+    request<{ item: ListItem }>(`/lists/${listId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }).then((r) => r.item),
+  /** Ticking and editing are the same call — a tick is a patch of one field. */
+  updateListItem: (listId: string, itemId: string, patch: ListItemUpdatePayload) =>
+    request<{ item: ListItem }>(`/lists/${listId}/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }).then((r) => r.item),
+  deleteListItem: (listId: string, itemId: string) =>
+    request<void>(`/lists/${listId}/items/${itemId}`, { method: 'DELETE' }),
+  clearCheckedItems: (listId: string) =>
+    request<{ list: CustomList; removed: number }>(`/lists/${listId}/items/clear-checked`, {
+      method: 'POST',
+    }),
+
+  grocery: (params: GroceryParams = {}) =>
+    request<{ list: GroceryList }>(`/lists/grocery${groceryQuery(params)}`).then((r) => r.list),
+  /**
+   * Returns the whole refreshed list rather than the one line: a tick can
+   * change nothing else, but the menu may have moved under the shopper, and
+   * one round trip per tap is what a supermarket connection can afford.
+   */
+  tickGroceryItem: (params: GroceryParams, key: string, checked: boolean) =>
+    request<{ list: GroceryList }>(`/lists/grocery/checks${groceryQuery(params)}`, {
+      method: 'POST',
+      body: JSON.stringify({ key, checked }),
+    }).then((r) => r.list),
+  clearGroceryChecks: (params: GroceryParams = {}) =>
+    request<{ list: GroceryList }>(`/lists/grocery/checks${groceryQuery(params)}`, {
+      method: 'DELETE',
+    }).then((r) => r.list),
 
   listFeeds: () => request<{ feeds: Feed[] }>('/feeds').then((r) => r.feeds),
   getFeed: (id: string) => request<{ feed: Feed; recentRuns: SyncRun[] }>(`/feeds/${id}`),

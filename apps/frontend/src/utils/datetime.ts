@@ -67,6 +67,37 @@ export function dayKeyLabel(dayKey: string): string {
   });
 }
 
+/**
+ * `Sat 7 Mar` for a bare `YYYY-MM-DD` key — read back in UTC for the same
+ * reason `dayKeyLabel` is, and short enough to sit on one line of a phone.
+ */
+export function dayKeyShortLabel(dayKey: string): string {
+  return new Date(`${dayKey}T00:00:00Z`).toLocaleDateString(LOCALE, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
+/**
+ * `today`, `tomorrow`, or `Sat 7 Mar`.
+ *
+ * Both arguments are day keys, so this is subtraction between two civil dates
+ * and never a timezone conversion. The near days get words because a shopper
+ * reading "for today" beside the fish knows what to do with it faster than
+ * they do with a date they have to place in the week.
+ */
+export function dayKeyRelativeLabel(dayKey: string, todayKey: string): string {
+  if (dayKey === todayKey) return 'today';
+  const days = Math.round(
+    (Date.parse(`${dayKey}T00:00:00Z`) - Date.parse(`${todayKey}T00:00:00Z`)) / 86_400_000,
+  );
+  if (days === 1) return 'tomorrow';
+  if (days === -1) return 'yesterday';
+  return dayKeyShortLabel(dayKey);
+}
+
 /** The calendar date an instant falls on, `YYYY-MM-DD`, in `timezone`. */
 export function dateKey(iso: string, timezone: string): string {
   return new Date(iso).toLocaleDateString('en-CA', {
