@@ -86,3 +86,37 @@ describe('004_ingredient_units', () => {
     db.close();
   });
 });
+
+describe('007_task_amounts', () => {
+  it('files ticks made before there was a price under the person who made them', () => {
+    const db = databaseBefore('007_');
+
+    db.prepare(
+      "INSERT INTO person (id, display_name, color, active, created_at, updated_at) VALUES ('p1', 'Anna', '#000', 1, 0, 0)",
+    ).run();
+    db.prepare(
+      `INSERT INTO task (id, title, person_id, starts_on, created_at, updated_at)
+       VALUES ('t1', 'Bins out', 'p1', '2026-03-02', 0, 0), ('t2', 'Dishes', NULL, '2026-03-02', 0, 0)`,
+    ).run();
+    db.prepare(
+      `INSERT INTO task_completion (task_id, day_key, completed_at)
+       VALUES ('t1', '2026-03-02', 0), ('t2', '2026-03-02', 0)`,
+    ).run();
+
+    runMigrations(db);
+
+    const rows = db
+      .prepare<[], { task_id: string; person_id: string | null; amount_cents: number }>(
+        'SELECT task_id, person_id, amount_cents FROM task_completion ORDER BY task_id',
+      )
+      .all();
+
+    // They were free — there was no price to record — but they were done by
+    // somebody, and leaving the name off would file the whole history under
+    // "Anyone" the first time the earnings page is opened.
+    expect(rows).toEqual([
+      { task_id: 't1', person_id: 'p1', amount_cents: 0 },
+      { task_id: 't2', person_id: null, amount_cents: 0 },
+    ]);
+  });
+});

@@ -2,11 +2,15 @@ import { Router } from 'express';
 import { z } from 'zod';
 import {
   dayKeySchema,
+  monthDayRange,
+  monthKeyOf,
+  monthKeySchema,
   taskCompletionSchema,
   taskInputSchema,
   taskUpdateSchema,
   TASK_OVERDUE_LOOKBACK_DAYS,
   type TaskBoard,
+  type TaskEarnings,
 } from '@picalendar/shared';
 import { config } from '../config/index.js';
 import { getDb } from '../db/index.js';
@@ -15,7 +19,7 @@ import * as tasks from '../db/repositories/tasks.js';
 import { TaskScheduleError } from '../db/repositories/tasks.js';
 import { HttpError } from '../middleware/errors.js';
 import { pathParam } from '../util/http.js';
-import { buildTaskColumns, occursOn } from '../util/tasks.js';
+import { buildEarnings, buildTaskColumns, occursOn } from '../util/tasks.js';
 import { addDaysToKey, nowEpoch, toDayKey } from '../util/time.js';
 
 /**
@@ -73,6 +77,48 @@ tasksRouter.get('/', (req, res) => {
   const query = boardQuerySchema.parse(req.query);
   res.set('Cache-Control', 'no-cache');
   res.json({ board: board(query.day ?? today()) });
+});
+
+const earningsQuerySchema = z.object({
+  /** Defaults to the month the display is in, which is the one being settled. */
+  month: monthKeySchema.optional(),
+});
+
+/**
+ * What everybody earned in a month.
+ *
+ * A month rather than a rolling window because a month is the unit pocket money
+ * is actually settled in; a fortnight back from today would give a different
+ * answer depending on the day somebody asked, which is not a number anybody can
+ * be paid against.
+ *
+ * Read entirely off the ticks. Each one carries the price it was made at and
+ * the person it was made for, so a settled month stays settled: raising a chore
+ * from 50c to $1 today does not re-price last March, and handing it to a
+ * sibling does not hand them the month somebody else spent doing it.
+ *
+ * Registered before the parameterised routes for the same reason
+ * `/definitions` is — Express matches in order, and `/:id` would otherwise go
+ * looking for a task called "earnings".
+ */
+tasksRouter.get('/earnings', (req, res) => {
+  const query = earningsQuerySchema.parse(req.query);
+  const month = query.month ?? monthKeyOf(today());
+  const { start, end } = monthDayRange(month);
+  const db = getDb();
+
+  const cards = buildEarnings(tasks.earningsInRange(db, start, end), people.listPeople(db));
+
+  res.set('Cache-Control', 'no-cache');
+  const payload: TaskEarnings = {
+    generatedAt: new Date().toISOString(),
+    timezone: config.display.timezone,
+    month,
+    people: cards,
+    completions: cards.reduce((total, person) => total + person.completions, 0),
+    totalCents: cards.reduce((total, person) => total + person.totalCents, 0),
+  };
+  res.json({ earnings: payload });
 });
 
 /**
@@ -153,7 +199,9 @@ tasksRouter.post('/:id/completions', (req, res) => {
     throw HttpError.notFound(`Task on ${input.dayKey}`);
   }
 
-  tasks.setTaskCompletion(db, id, input.dayKey, input.completed);
+  // The task goes in whole: the price and the person on the row written are
+  // taken off it server-side, never from the request.
+  tasks.setTaskCompletion(db, task, input.dayKey, input.completed);
 
   const query = boardQuerySchema.parse(req.query);
   res.json({ board: board(query.day ?? today()) });

@@ -537,6 +537,7 @@ that needed a sign-in would not get used.
 | -------------------------------------- | ------------------------- | -------------------------------------------------------- |
 | `GET /api/tasks?day=`                  | —                         | The board; `day` defaults to today in `DISPLAY_TIMEZONE` |
 | `POST /api/tasks/:id/completions?day=` | `{ dayKey, completed }`   | Ticks one day off, returns the refreshed board           |
+| `GET /api/tasks/earnings?month=`       | —                         | A month's takings per person; `month` is `YYYY-MM`       |
 | `GET /api/tasks/definitions`           | —                         | The task rows themselves, retired ones included          |
 | `GET /api/tasks/definitions/:id`       | —                         | One task plus `lastCompletedOn`                          |
 | `POST /api/tasks`                      | task fields               | **201**                                                  |
@@ -619,6 +620,61 @@ storing it would leave a row no derivation ever reads back.
 
 Re-ticking the same day leaves the original `completedAt` alone. Nothing was
 done twice.
+
+A tick is also a **ledger entry**: it stores the task's `amountCents` and
+`personId` as they stood at that moment, both derived server-side and never
+taken from the request. Re-ticking leaves those alone for the same reason it
+leaves `completedAt` alone.
+
+### What a chore is worth
+
+`amountCents` is an integer of minor units, `0` by default and capped at
+`MAX_TASK_AMOUNT_CENTS` (100000, i.e. $1000) — a bound against a stray
+keystroke, not a judgement about pocket money. Money is counted, never measured:
+nothing in the codebase holds an amount as a float, and cents only become a
+decimal on their way onto a screen.
+
+Zero is the default that a household which does not pay for chores never has to
+think about, because no surface draws an amount it does not have.
+
+`TaskInstance.amountCents` is the task's price **as it stands** — what the card
+would pay if it were ticked now. An overdue card pays it once however many days
+it stands for, for the same reason it is one card.
+
+### Earnings
+
+```
+GET /api/tasks/earnings?month=2026-09
+```
+
+A month, because a month is the unit pocket money is actually settled in; a
+rolling window would give a different answer depending on the day somebody
+asked. `month` is a `YYYY-MM` civil month — a prefix of a day key, timezone-free
+by the same construction — and defaults to the month the display is in. Anything
+that is not one is a **422**.
+
+Every figure is read off the ticks, never off the tasks, which is what makes a
+settled month stay settled:
+
+- Raising a chore from 50c to $1 today does **not** re-price last March.
+- Handing a chore to a sibling does **not** hand them the month somebody else
+  spent doing it.
+
+Only the title, icon and colour are joined live from `task` — what the chore
+_is_, which is fair to read fresh, since renaming "Bins" to "Bins & recycling"
+does not make last month's a different chore.
+
+Every active person gets a card even with nothing on it, exactly as they get a
+board column: on the first of the month that would otherwise be every name
+disappearing at once. Anyone else holding earnings gets one too, and
+`personId: null` collects both the unassigned work and the ticks of anybody
+deleted since — their rows keep the money and lose the name, as their chores
+keep the bin and lose the owner.
+
+Each person carries `tasks`, a breakdown of `completions` and `totalCents` per
+chore, biggest earner first. It is a count rather than a rate because the days
+behind it were not necessarily all paid the same — which is the whole point of
+storing the price on the tick.
 
 ---
 

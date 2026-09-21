@@ -30,6 +30,7 @@ import type {
   SyncRun,
   Task,
   TaskBoard,
+  TaskEarnings,
   TaskInputPayload,
   TaskUpdatePayload,
   Wish,
@@ -260,6 +261,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ dayKey, completed }),
     }).then((r) => r.board),
+
+  /**
+   * What everybody earned in a month. `month` is a `YYYY-MM` civil month, never
+   * an instant — it is omitted to mean the month the display is in.
+   */
+  taskEarnings: (params: { month?: string } = {}) =>
+    request<{ earnings: TaskEarnings }>(
+      `/tasks/earnings${params.month ? `?month=${params.month}` : ''}`,
+    ).then((r) => r.earnings),
 
   /** The task definitions, for the manage page and the editor. */
   listTasks: () => request<{ tasks: Task[] }>('/tasks/definitions').then((r) => r.tasks),

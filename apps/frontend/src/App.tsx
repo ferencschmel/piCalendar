@@ -4,6 +4,7 @@ import { DashboardPage } from './pages/DashboardPage.js';
 import { TasksPage } from './pages/TasksPage.js';
 import { TaskListPage } from './pages/TaskListPage.js';
 import { TaskEditorPage } from './pages/TaskEditorPage.js';
+import { TaskEarningsPage } from './pages/TaskEarningsPage.js';
 import { MenuPage } from './pages/MenuPage.js';
 import { DishEditorPage } from './pages/DishEditorPage.js';
 import { ListsPage } from './pages/ListsPage.js';
@@ -24,6 +25,7 @@ export function App(): JSX.Element {
             swallow them and go looking for a task called "new". */}
         <Route path="tasks/new" element={<TaskEditorPage />} />
         <Route path="tasks/all" element={<TaskListPage />} />
+        <Route path="tasks/earnings" element={<TaskEarningsPage />} />
         <Route path="tasks/:id" element={<TaskEditorPage />} />
         <Route path="menu" element={<MenuPage />} />
         {/* Nested under /menu so the nav's Menu entry stays lit while a dish is

@@ -81,6 +81,22 @@ export function dayKeyShortLabel(dayKey: string): string {
 }
 
 /**
+ * `September 2026` for a bare `YYYY-MM` month key.
+ *
+ * Anchored to the first of the month and read back in UTC, for the same reason
+ * `dayKeyLabel` is: a month key is already a civil date, and pushing it through
+ * the display zone would show August on the first of September in any zone past
+ * +12.
+ */
+export function monthKeyLabel(monthKey: string): string {
+  return new Date(`${monthKey}-01T00:00:00Z`).toLocaleDateString(LOCALE, {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+/**
  * `today`, `tomorrow`, or `Sat 7 Mar`.
  *
  * Both arguments are day keys, so this is subtraction between two civil dates

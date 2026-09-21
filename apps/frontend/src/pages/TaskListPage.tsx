@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { scheduleLabel, DAYPART_LABELS, type Task } from '@picalendar/shared';
+import { formatMoney, scheduleLabel, DAYPART_LABELS, type Task } from '@picalendar/shared';
 import { api } from '../api/client.js';
 import { usePolling } from '../hooks/usePolling.js';
 import { dayKeyShortLabel } from '../utils/datetime.js';
@@ -96,6 +96,9 @@ function TaskRow({ task }: { task: Task }): JSX.Element {
             {task.schedule.frequency === 'once'
               ? dayKeyShortLabel(task.schedule.startsOn)
               : scheduleLabel(task.schedule)}
+            {/* Last, and only when priced: this list is read to find a chore,
+                not to audit the rates, and an unpaid one has nothing to say. */}
+            {task.amountCents > 0 && ` · ${formatMoney(task.amountCents)}`}
           </span>
         </span>
         <i className="bi bi-chevron-right task-index__chevron" aria-hidden="true" />

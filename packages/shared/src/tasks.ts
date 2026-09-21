@@ -112,6 +112,32 @@ const hexColorSchema = z
 export const DEFAULT_TASK_ICON = 'bi-check2-square';
 export const DEFAULT_TASK_COLOR = '#4c6ef5';
 
+/* --- What it pays --------------------------------------------------------- */
+
+/**
+ * The most a single chore can be worth, in cents.
+ *
+ * A bound rather than a judgement about pocket money: a stray keystroke in a
+ * number field is how `$5` becomes `$500`, and the first anyone would know of
+ * it is a monthly total nobody can explain. A thousand is far above anything a
+ * household pays for taking the bins out and far below a typo.
+ */
+export const MAX_TASK_AMOUNT_CENTS = 100_000;
+
+/**
+ * Money is an integer of minor units everywhere in this codebase, and only
+ * becomes a decimal on its way onto a screen. Counting in cents is what keeps a
+ * month of 50c chores from summing to $11.999999999999998 — a total nobody can
+ * argue with is the entire value of the feature.
+ */
+export const amountCentsSchema = z
+  .number()
+  .int('An amount is a whole number of cents')
+  .min(0)
+  .max(MAX_TASK_AMOUNT_CENTS);
+
+export const DEFAULT_TASK_AMOUNT_CENTS = 0;
+
 /** Offered in the editor's picker. Any valid `bi-*` name is accepted. */
 export const suggestedTaskIcons = [
   'bi-check2-square',
@@ -169,6 +195,13 @@ export const taskInputSchema = z
     daypart: daypartSchema.default('morning'),
     icon: taskIconSchema.default(DEFAULT_TASK_ICON),
     color: hexColorSchema.default(DEFAULT_TASK_COLOR),
+    /**
+     * What doing it once pays, in cents. Zero by default, which is what a
+     * household that does not pay for chores never has to think about: nothing
+     * draws an amount it does not have, so the feature stays invisible until
+     * somebody puts a price on something.
+     */
+    amountCents: amountCentsSchema.default(DEFAULT_TASK_AMOUNT_CENTS),
     /** Retired rather than deleted, so a chore nobody does any more drops off
      *  the board without erasing the mornings somebody did it. */
     active: z.boolean().default(true),
@@ -210,6 +243,7 @@ export const taskUpdateSchema = z.object({
   daypart: daypartSchema.optional(),
   icon: taskIconSchema.optional(),
   color: hexColorSchema.optional(),
+  amountCents: amountCentsSchema.optional(),
   active: z.boolean().optional(),
   frequency: taskFrequencySchema.optional(),
   interval: z.number().int().min(1).max(12).optional(),
@@ -239,6 +273,8 @@ export interface Task {
   daypart: Daypart;
   icon: string;
   color: string;
+  /** What one day of it pays, in cents. Zero for a chore nobody is paid for. */
+  amountCents: number;
   active: boolean;
   schedule: TaskSchedule;
   createdAt: string;
@@ -264,6 +300,13 @@ export interface TaskInstance {
   note: string | null;
   icon: string;
   color: string;
+  /**
+   * What this card pays if it is ticked, in cents — the task's rate as it
+   * stands, not the rate of any tick already recorded. An overdue card pays it
+   * *once* however many days it stands for, for the same reason it is one card:
+   * nobody takes out Tuesday's bins on Thursday, they take out the bins.
+   */
+  amountCents: number;
   daypart: Daypart;
   dayKey: string;
   /** Whether it comes back — a one-off that slipped is a different worry from
@@ -337,6 +380,116 @@ export const taskCompletionSchema = z.object({
 });
 export type TaskCompletionInput = z.infer<typeof taskCompletionSchema>;
 
+/* --- What it all added up to ---------------------------------------------- */
+
+/**
+ * `YYYY-MM`. A civil month, and timezone-free for exactly the reason a day key
+ * is: the zone was applied when the day key underneath it was derived, and
+ * everything here compares and slices strings rather than converting them.
+ *
+ * A month is the unit pocket money is actually settled in — nobody is paid per
+ * fortnight, and a rolling window would give a different answer depending on
+ * the day somebody asked.
+ */
+export const monthKeySchema = z.string().regex(/^\d{4}-\d{2}$/, 'Must be a month like 2026-09');
+
+/** The month a day key falls in. A prefix, never a conversion. */
+export function monthKeyOf(dayKey: string): string {
+  return dayKey.slice(0, 7);
+}
+
+/** How many days a month holds, so January steps back to a 28th of February. */
+function daysInMonthKey(monthKey: string): number {
+  const year = Number(monthKey.slice(0, 4));
+  const month = Number(monthKey.slice(5, 7));
+  // Day 0 of the next month is the last day of this one.
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/** `2026-09` a few months either way, rolling the year over with it. */
+export function addMonthsToKey(monthKey: string, months: number): string {
+  const year = Number(monthKey.slice(0, 4));
+  const month = Number(monthKey.slice(5, 7));
+  // Counted in months from year zero and split back, which rolls December to
+  // January without a branch and works identically for a negative step.
+  const total = year * 12 + (month - 1) + months;
+  const nextYear = Math.floor(total / 12);
+  const nextMonth = total - nextYear * 12 + 1;
+  return `${String(nextYear).padStart(4, '0')}-${String(nextMonth).padStart(2, '0')}`;
+}
+
+/**
+ * The first and last day of a month, as day keys — the range a month's ticks
+ * are looked for in.
+ *
+ * Both ends are inclusive and both are keys, so the lookup is a text range scan
+ * over the completion index and nothing is converted on the way.
+ */
+export function monthDayRange(monthKey: string): { start: string; end: string } {
+  return {
+    start: `${monthKey}-01`,
+    end: `${monthKey}-${String(daysInMonthKey(monthKey)).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * What one chore paid somebody over a month.
+ *
+ * The breakdown exists because a total on its own is not a number anybody can
+ * check. "You earned $14" is an assertion; "the bins nine times at 50c and the
+ * dishwasher nineteen times at 50c" is an answer to the question that follows
+ * it, which on pocket-money day is always asked.
+ */
+export interface TaskEarningsLine {
+  taskId: string;
+  title: string;
+  icon: string;
+  color: string;
+  /** How many days of it were ticked in the month. */
+  completions: number;
+  /**
+   * What those ticks paid, each at the rate it was ticked at. Not
+   * `completions` times the task's price today — see `TaskEarningsPerson`.
+   */
+  totalCents: number;
+}
+
+/**
+ * One person's month.
+ *
+ * Every figure here comes from the ticks themselves, which carry the price and
+ * the person they were made under. That is what makes a past month a settled
+ * number rather than a live one: raising the bins from 50c to $1 in September
+ * does not re-price March, and handing the chore to a sibling does not hand
+ * them the month somebody else spent doing it.
+ *
+ * `personId` is null for work nobody was named on, the same column the board
+ * keeps for it — including anything done by somebody who has since left, whose
+ * ticks lose their name the way their chores do.
+ */
+export interface TaskEarningsPerson {
+  personId: string | null;
+  displayName: string;
+  color: string;
+  /** Chore-days ticked, across every task. */
+  completions: number;
+  totalCents: number;
+  /** What made it up, biggest earner first. */
+  tasks: TaskEarningsLine[];
+}
+
+export interface TaskEarnings {
+  generatedAt: string;
+  timezone: string;
+  /** `YYYY-MM`; defaults to the month the display is currently in. */
+  month: string;
+  /** Everyone who did something, plus every active person, so a blank month
+   *  reads as "nothing yet" under a name rather than as a missing name. */
+  people: TaskEarningsPerson[];
+  completions: number;
+  totalCents: number;
+}
+
 /* --- Words ---------------------------------------------------------------- */
 
 /** `1st`, `2nd`, `23rd` — for "every month on the 23rd". */
@@ -388,6 +541,24 @@ export function scheduleLabel(schedule: TaskSchedule): string {
   const day = ordinal(Number(schedule.startsOn.slice(8, 10)));
   if (schedule.interval === 1) return `Every month on the ${day}`;
   return `Every ${schedule.interval} months on the ${day}`;
+}
+
+/**
+ * `$0`, `$2`, `$2.50` — cents on their way onto a screen, and the only place
+ * they stop being an integer. Named for money rather than for amounts, because
+ * `formatAmount` is already the menu's ingredient quantities.
+ *
+ * The pence are dropped when there are none, because `$2` is what somebody
+ * says out loud and a column of `$2.00` is a column of noise on a display read
+ * from across a room. Two digits otherwise, so `$2.50` never renders as
+ * `$2.5`.
+ */
+export function formatMoney(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const absolute = Math.abs(cents);
+  const whole = Math.floor(absolute / 100);
+  const part = absolute % 100;
+  return part === 0 ? `${sign}$${whole}` : `${sign}$${whole}.${String(part).padStart(2, '0')}`;
 }
 
 /** `4 left`, `All done`, `Nothing today` — under a column heading. */

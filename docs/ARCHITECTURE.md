@@ -332,6 +332,36 @@ skipped. That is what makes ticking the pile settle it instead of handing back
 the next day down, and it is why a column's "3 left" is a number somebody can
 act on.
 
+### A tick is a ledger entry
+
+A chore carries `amount_cents`, zero by default, and a tick stores **its own
+copy** of that amount along with the person it was made for. Both are derived
+server-side at the moment of the tick, never taken from the request — the same
+rule `grocery_check`'s signature follows, and for a related reason.
+
+The alternative, summing live through a join to `task`, is the obvious design
+and is wrong in two directions at once. Raising the bins from 50c to $1 in
+September would silently re-price every March bin as back-pay; handing the chore
+to a sibling would hand them the month somebody else spent doing it. Neither is
+arguable at a kitchen table, which is where this number is read out. What a
+chore paid and who it paid were settled on the day it was done, so that is where
+they are recorded — two columns on a row already being written, and no second
+table.
+
+Money is counted rather than measured: every amount is an integer of minor units
+and only becomes a decimal on its way onto a screen, because a month of 50c
+chores summing to `$11.999999999999998` would discredit the whole feature.
+
+`GET /api/tasks/earnings?month=` groups those ticks in SQL over
+`idx_task_completion_person`. A month is the unit, because a month is what
+pocket money is settled in and a rolling window would answer differently
+depending on the day it was asked. `YYYY-MM` is a prefix of a day key and is
+timezone-free by the same construction — both ends of the range are keys, so
+nothing is converted, and `test/tasks.test.ts` pins the month boundaries under
+all four CI zones. Only the title, icon and colour are read live from `task`:
+renaming "Bins" to "Bins & recycling" does not make last month's a different
+chore.
+
 ## Frontend
 
 React 18 + Bootstrap 5, built by Vite, served as static files by the backend.
@@ -371,6 +401,14 @@ anchor and the day grid's pan — a board left on Thursday by whoever walked pas
 would otherwise still show Thursday on Saturday. Chores are written up on their
 own route (`/tasks/:id`), remounted per id, with `/tasks/all` listing the
 definitions including retired ones, which are by design nowhere on the board.
+
+`/tasks/earnings` is the month's pocket money, and is the one task page not read
+from across a room — it is settled by somebody holding a phone, so it borrows
+`/lists`' 40rem column rather than the board's full bleed. Its month is an
+override expiring after two minutes like the board's day, since it is one tap
+from a wall nobody is looking after. A card shows a chore's price only when it
+has one, so a household that does not pay for chores never sees a `$0` it has to
+learn to ignore.
 
 ### Four views
 

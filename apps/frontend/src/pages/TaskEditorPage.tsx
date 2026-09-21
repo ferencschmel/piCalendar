@@ -5,9 +5,11 @@ import {
   DAYPART_LABELS,
   DEFAULT_TASK_COLOR,
   DEFAULT_TASK_ICON,
+  MAX_TASK_AMOUNT_CENTS,
   TASK_FREQUENCIES,
   WEEKDAY_LABELS,
   WEEKDAY_LONG_LABELS,
+  formatMoney,
   scheduleLabel,
   suggestedTaskIcons,
   type Daypart,
@@ -45,12 +47,37 @@ interface Draft {
   daypart: Daypart;
   icon: string;
   color: string;
+  /**
+   * Held as the characters in the box rather than as cents, because a
+   * half-typed `1.` is a state a number cannot hold — rounding it to cents on
+   * every keystroke would delete the decimal point under the hand typing it.
+   */
+  amount: string;
   active: boolean;
   frequency: TaskFrequency;
   interval: number;
   weekdays: number[];
   startsOn: string;
   endsOn: string;
+}
+
+/** `250` to `2.50`, for putting a stored amount back in the box. */
+function centsToInput(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+/**
+ * What is in the box, as cents. Blank and nonsense both mean nothing — the
+ * default a chore has when nobody has priced it.
+ *
+ * Rounded rather than truncated, and rounded *once*: a third of a dollar typed
+ * as `0.333` is a cent question, and floating point is only allowed to touch
+ * money on this line.
+ */
+function centsFromInput(amount: string): number {
+  const dollars = Number(amount.trim());
+  if (amount.trim() === '' || !Number.isFinite(dollars) || dollars < 0) return 0;
+  return Math.min(Math.round(dollars * 100), MAX_TASK_AMOUNT_CENTS);
 }
 
 /** Today as a day key, read off the browser only to seed an empty form. */
@@ -70,6 +97,7 @@ function emptyDraft(): Draft {
     daypart: 'morning',
     icon: DEFAULT_TASK_ICON,
     color: DEFAULT_TASK_COLOR,
+    amount: '',
     active: true,
     frequency: 'once',
     interval: 1,
@@ -87,6 +115,10 @@ function draftOf(task: Task): Draft {
     daypart: task.daypart,
     icon: task.icon,
     color: task.color,
+    // A chore nobody is paid for shows an empty box, not `0` — the placeholder
+    // says what an empty one means, and a household not using this never has a
+    // zero to wonder about.
+    amount: task.amountCents === 0 ? '' : centsToInput(task.amountCents),
     active: task.active,
     frequency: task.schedule.frequency,
     interval: task.schedule.interval,
@@ -183,6 +215,7 @@ function TaskEditor({ id }: { id?: string }): JSX.Element {
       daypart: draft.daypart,
       icon: draft.icon,
       color: draft.color,
+      amountCents: centsFromInput(draft.amount),
       active: draft.active,
       frequency: draft.frequency,
       interval: draft.interval,
@@ -350,6 +383,35 @@ function TaskEditor({ id }: { id?: string }): JSX.Element {
               ))}
             </div>
           </fieldset>
+
+          <div>
+            <label className="form-label" htmlFor="task-amount">
+              Worth <span className="text-body-secondary">(optional)</span>
+            </label>
+            <div className="input-group task-editor__amount">
+              <span className="input-group-text">$</span>
+              <input
+                id="task-amount"
+                type="number"
+                inputMode="decimal"
+                className="form-control"
+                min={0}
+                max={MAX_TASK_AMOUNT_CENTS / 100}
+                step={0.25}
+                value={draft.amount}
+                placeholder="0"
+                onChange={(event) => patch({ amount: event.target.value })}
+              />
+            </div>
+            <p className="form-text">
+              {/* Spelled out because a recurring chore's price is per *day* it
+                  is done, which is the one thing somebody could read either
+                  way — and the difference between 50c and $26 a year. */}
+              {centsFromInput(draft.amount) === 0
+                ? 'Chores are worth nothing unless you say otherwise.'
+                : `${formatMoney(centsFromInput(draft.amount))} each time it is ticked off.`}
+            </p>
+          </div>
 
           <fieldset className="task-editor__schedule">
             <legend className="form-label">How often</legend>

@@ -164,10 +164,18 @@ export function TasksPage(): JSX.Element {
           )}
         </div>
 
-        <Link to="/tasks/all" className="btn btn-sm btn-outline-secondary">
-          <i className="bi bi-sliders me-1" aria-hidden="true" />
-          Manage
-        </Link>
+        <div className="task-board__links">
+          {/* Beside "Manage" rather than in the nav bar: this is a question
+              about the board, asked once a month, not a fifth place to be. */}
+          <Link to="/tasks/earnings" className="btn btn-sm btn-outline-secondary">
+            <i className="bi bi-piggy-bank me-1" aria-hidden="true" />
+            Earnings
+          </Link>
+          <Link to="/tasks/all" className="btn btn-sm btn-outline-secondary">
+            <i className="bi bi-sliders me-1" aria-hidden="true" />
+            Manage
+          </Link>
+        </div>
       </header>
 
       {error && (

@@ -5,6 +5,8 @@ import {
   type Person,
   type Task,
   type TaskColumn,
+  type TaskEarningsLine,
+  type TaskEarningsPerson,
   type TaskInstance,
   type TaskSchedule,
 } from '@picalendar/shared';
@@ -119,6 +121,10 @@ function toInstance(task: Task, dayKey: string, completions: CompletionMap): Tas
     note: task.note,
     icon: task.icon,
     color: task.color,
+    // The task's price as it stands, which is what this card would pay if it
+    // were ticked now. A tick already recorded carries its own, and the two are
+    // deliberately different numbers.
+    amountCents: task.amountCents,
     daypart: task.daypart,
     dayKey,
     recurring: task.schedule.frequency !== 'once',
@@ -269,4 +275,89 @@ export function buildTaskColumns(
   if (holdsWork(UNASSIGNED)) columns.push(column(null, 'Anyone', '#6c757d'));
 
   return columns;
+}
+
+/* --- What it all added up to ---------------------------------------------- */
+
+/**
+ * One person's ticks of one task over a range, as SQL groups them.
+ *
+ * Grouped by the pair rather than handed over row by row: a month of a daily
+ * chore is thirty rows that answer one line of the page, and summing them in
+ * the database is both fewer rows over the wire and one indexed scan instead of
+ * a walk.
+ */
+export interface EarningsRow {
+  person_id: string | null;
+  task_id: string;
+  title: string;
+  icon: string;
+  color: string;
+  completions: number;
+  total_cents: number;
+}
+
+/** Biggest earner first, then by name so two equal chores never swap places. */
+function compareLines(a: TaskEarningsLine, b: TaskEarningsLine): number {
+  return b.totalCents - a.totalCents || a.title.localeCompare(b.title, 'en-GB');
+}
+
+/**
+ * A month of ticks, divided up the way the board divides a day.
+ *
+ * Every active person gets a card even with nothing on it, for the same reason
+ * every active person gets a column: "you have not earned anything yet this
+ * month" is an answer, where a name that has vanished reads as a fault — and on
+ * the first of the month that would be every name at once.
+ *
+ * Anyone else holding earnings gets one too. That covers somebody who has left
+ * the household mid-month and the unassigned pile, which here also catches the
+ * ticks of anybody deleted since: their rows keep the money and lose the name,
+ * exactly as their chores keep the bin and lose the owner.
+ */
+export function buildEarnings(rows: EarningsRow[], people: Person[]): TaskEarningsPerson[] {
+  /** Null is a real bucket here, so the key is folded rather than the value. */
+  const UNASSIGNED = '';
+  const lines = new Map<string, TaskEarningsLine[]>();
+
+  for (const row of rows) {
+    const key = row.person_id ?? UNASSIGNED;
+    const line: TaskEarningsLine = {
+      taskId: row.task_id,
+      title: row.title,
+      icon: row.icon,
+      color: row.color,
+      completions: row.completions,
+      totalCents: row.total_cents,
+    };
+    const bucket = lines.get(key);
+    if (bucket) bucket.push(line);
+    else lines.set(key, [line]);
+  }
+
+  const card = (
+    personId: string | null,
+    displayName: string,
+    color: string,
+  ): TaskEarningsPerson => {
+    const own = (lines.get(personId ?? UNASSIGNED) ?? []).sort(compareLines);
+    return {
+      personId,
+      displayName,
+      color,
+      completions: own.reduce((total, line) => total + line.completions, 0),
+      totalCents: own.reduce((total, line) => total + line.totalCents, 0),
+      tasks: own,
+    };
+  };
+
+  const earned = (key: string): boolean => (lines.get(key)?.length ?? 0) > 0;
+
+  const cards = people
+    .filter((person) => person.active || earned(person.id))
+    .map((person) => card(person.id, person.displayName, person.color));
+
+  if (earned(UNASSIGNED)) cards.push(card(null, 'Anyone', '#6c757d'));
+
+  return cards;
 }

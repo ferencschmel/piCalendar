@@ -9,7 +9,7 @@ import {
 import type { Db } from '../index.js';
 import { newId } from '../../util/ids.js';
 import { nowEpoch, toIso } from '../../util/time.js';
-import type { CompletionMap } from '../../util/tasks.js';
+import type { CompletionMap, EarningsRow } from '../../util/tasks.js';
 
 interface TaskRow {
   id: string;
@@ -20,6 +20,7 @@ interface TaskRow {
   daypart: Daypart;
   icon: string;
   color: string;
+  amount_cents: number;
   frequency: TaskFrequency;
   interval: number;
   weekdays: string;
@@ -59,6 +60,7 @@ function toTask(row: TaskRow): Task {
     daypart: row.daypart,
     icon: row.icon,
     color: row.color,
+    amountCents: row.amount_cents,
     active: row.active === 1,
     schedule: {
       frequency: row.frequency,
@@ -79,8 +81,8 @@ function toTask(row: TaskRow): Task {
  */
 const SELECT_TASK = `
   SELECT t.id, t.title, t.person_id, p.display_name AS person_name, t.note, t.daypart,
-         t.icon, t.color, t.frequency, t.interval, t.weekdays, t.starts_on, t.ends_on,
-         t.active, t.created_at, t.updated_at
+         t.icon, t.color, t.amount_cents, t.frequency, t.interval, t.weekdays,
+         t.starts_on, t.ends_on, t.active, t.created_at, t.updated_at
   FROM task t
   LEFT JOIN person p ON p.id = t.person_id`;
 
@@ -127,10 +129,10 @@ export function createTask(db: Db, input: TaskInput): Task {
   const now = nowEpoch();
 
   db.prepare(
-    `INSERT INTO task (id, title, person_id, note, daypart, icon, color, frequency,
-       interval, weekdays, starts_on, ends_on, active, created_at, updated_at)
-     VALUES (@id, @title, @personId, @note, @daypart, @icon, @color, @frequency,
-       @interval, @weekdays, @startsOn, @endsOn, @active, @now, @now)`,
+    `INSERT INTO task (id, title, person_id, note, daypart, icon, color, amount_cents,
+       frequency, interval, weekdays, starts_on, ends_on, active, created_at, updated_at)
+     VALUES (@id, @title, @personId, @note, @daypart, @icon, @color, @amountCents,
+       @frequency, @interval, @weekdays, @startsOn, @endsOn, @active, @now, @now)`,
   ).run({
     id,
     title: input.title,
@@ -139,6 +141,7 @@ export function createTask(db: Db, input: TaskInput): Task {
     daypart: input.daypart,
     icon: input.icon,
     color: input.color,
+    amountCents: input.amountCents,
     frequency: input.frequency,
     interval: input.frequency === 'once' ? 1 : input.interval,
     // A one-off has no weekdays to keep, and a monthly task takes its date from
@@ -181,9 +184,9 @@ export function updateTask(db: Db, id: string, patch: TaskUpdate): Task | null {
 
   db.prepare(
     `UPDATE task SET title = @title, person_id = @personId, note = @note, daypart = @daypart,
-       icon = @icon, color = @color, frequency = @frequency, interval = @interval,
-       weekdays = @weekdays, starts_on = @startsOn, ends_on = @endsOn, active = @active,
-       updated_at = @now
+       icon = @icon, color = @color, amount_cents = @amountCents, frequency = @frequency,
+       interval = @interval, weekdays = @weekdays, starts_on = @startsOn, ends_on = @endsOn,
+       active = @active, updated_at = @now
      WHERE id = @id`,
   ).run({
     id,
@@ -193,6 +196,9 @@ export function updateTask(db: Db, id: string, patch: TaskUpdate): Task | null {
     daypart: patch.daypart ?? existing.daypart,
     icon: patch.icon ?? existing.icon,
     color: patch.color ?? existing.color,
+    // A new price applies from here on and never backwards: the ticks already
+    // recorded carry the rate they were made at.
+    amountCents: patch.amountCents ?? existing.amountCents,
     frequency,
     interval: frequency === 'once' ? 1 : (patch.interval ?? existing.schedule.interval),
     weekdays: frequency === 'weekly' ? serialiseWeekdays(weekdays) : '',
@@ -243,24 +249,67 @@ export function completionsInWindow(db: Db, startKey: string, endKey: string): C
 /**
  * Tick a task off for a day, or take the tick back.
  *
- * Re-ticking leaves the original time alone, exactly as a list item's does:
- * nothing was done twice, and overwriting it would lose the answer to "when
- * did the bins last go out" on the second tap of a touchscreen.
+ * The whole task goes in rather than its id, because the row written is a
+ * ledger entry and not a pointer: the price and the person come off the task as
+ * it stands *now*, server-side, and are frozen into the row. A caller cannot
+ * name its own price for the same reason a grocery tick's signature is never
+ * taken from the request.
+ *
+ * Re-ticking leaves both the original time and the original price alone,
+ * exactly as a list item's does: nothing was done twice, and overwriting them
+ * would lose the answer to "when did the bins last go out" on the second tap of
+ * a touchscreen — and quietly re-price a month on the way.
  */
-export function setTaskCompletion(
-  db: Db,
-  taskId: string,
-  dayKey: string,
-  completed: boolean,
-): void {
+export function setTaskCompletion(db: Db, task: Task, dayKey: string, completed: boolean): void {
   if (completed) {
     db.prepare(
-      `INSERT INTO task_completion (task_id, day_key, completed_at) VALUES (?, ?, ?)
+      `INSERT INTO task_completion (task_id, day_key, completed_at, amount_cents, person_id)
+       VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (task_id, day_key) DO NOTHING`,
-    ).run(taskId, dayKey, nowEpoch());
+    ).run(task.id, dayKey, nowEpoch(), task.amountCents, task.personId);
   } else {
-    db.prepare('DELETE FROM task_completion WHERE task_id = ? AND day_key = ?').run(taskId, dayKey);
+    db.prepare('DELETE FROM task_completion WHERE task_id = ? AND day_key = ?').run(
+      task.id,
+      dayKey,
+    );
   }
+}
+
+/**
+ * Every tick in a range of days, grouped by who made it and what they did.
+ *
+ * Grouped in SQL rather than in JavaScript because the answer is a handful of
+ * rows where the input is a month of ticks, and `idx_task_completion_person`
+ * turns the whole thing into one indexed scan — day keys sort chronologically
+ * as text by construction, which is the same property the board's own query
+ * and the agenda's both lean on.
+ *
+ * The sums come off `task_completion`, never off `task`. A tick carries the
+ * price it was made at and the person it was made for; joining the price back
+ * live would have a raise in September re-pricing March, and a reassignment
+ * handing somebody else's month to a sibling.
+ *
+ * The join to `task` is for the title and the icon only — what the chore *is*,
+ * which is fair to read live, since renaming "Bins" to "Bins & recycling" does
+ * not make last month's a different chore. It is an inner join because a
+ * completion cannot outlive its task: the foreign key cascades.
+ */
+export function earningsInRange(db: Db, startKey: string, endKey: string): EarningsRow[] {
+  return db
+    .prepare<[string, string], EarningsRow>(
+      `SELECT c.person_id        AS person_id,
+              c.task_id          AS task_id,
+              t.title            AS title,
+              t.icon             AS icon,
+              t.color            AS color,
+              COUNT(*)           AS completions,
+              SUM(c.amount_cents) AS total_cents
+         FROM task_completion c
+         JOIN task t ON t.id = c.task_id
+        WHERE c.day_key BETWEEN ? AND ?
+        GROUP BY c.person_id, c.task_id`,
+    )
+    .all(startKey, endKey);
 }
 
 /** When a task was last ticked, for the editor's "last done" line. */

@@ -1,8 +1,15 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { Person, Task, TaskBoard } from '@picalendar/shared';
-import { scheduleLabel, TASK_OVERDUE_LOOKBACK_DAYS } from '@picalendar/shared';
+import type { Person, Task, TaskBoard, TaskEarnings } from '@picalendar/shared';
+import {
+  addMonthsToKey,
+  formatMoney,
+  monthDayRange,
+  monthKeyOf,
+  scheduleLabel,
+  TASK_OVERDUE_LOOKBACK_DAYS,
+} from '@picalendar/shared';
 import { closeDb, getDb } from '../src/db/index.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { createServer } from '../src/server.js';
@@ -43,6 +50,21 @@ async function getBoard(day: string): Promise<TaskBoard> {
   const { body } = await call<{ board: TaskBoard }>(`/tasks?day=${day}`);
   return body.board;
 }
+
+async function tick(task: Task, dayKey: string, completed = true): Promise<void> {
+  await call(`/tasks/${task.id}/completions`, {
+    method: 'POST',
+    body: JSON.stringify({ dayKey, completed }),
+  });
+}
+
+async function getEarnings(month: string): Promise<TaskEarnings> {
+  const { body } = await call<{ earnings: TaskEarnings }>(`/tasks/earnings?month=${month}`);
+  return body.earnings;
+}
+
+/** The month `MONDAY` falls in, which is the one the earnings tests settle. */
+const MARCH = '2026-03';
 
 /** 2026-03-02 is a Monday, and the week the schedule assertions below count from. */
 const MONDAY = '2026-03-02';
@@ -422,6 +444,213 @@ describe('ticking a task off', () => {
   });
 });
 
+describe('what a chore is worth', () => {
+  it('costs nothing by default, so a household that does not pay never sees it', async () => {
+    const task = await addTask('Bins out');
+    expect(task.amountCents).toBe(0);
+
+    const anna = await addPerson('Anna');
+    await call(`/tasks/${task.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ personId: anna.id }),
+    });
+    await tick(task, MONDAY);
+
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.totalCents).toBe(0);
+    expect(earnings.people[0]?.completions).toBe(1);
+  });
+
+  it('refuses an amount that is not a whole number of cents, or is negative', async () => {
+    for (const amountCents of [-50, 12.5, 100_001]) {
+      const { status } = await call('/tasks', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Bins out', startsOn: MONDAY, amountCents }),
+      });
+      expect(status).toBe(422);
+    }
+  });
+
+  it('sums a month per person, and says what it was made of', async () => {
+    const anna = await addPerson('Anna');
+    const ben = await addPerson('Ben');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+    const dishes = await addTask('Dishwasher', { personId: anna.id, amountCents: 25 });
+    const walk = await addTask('Walk the dog', { personId: ben.id, amountCents: 100 });
+
+    await tick(bins, MONDAY);
+    await tick(dishes, MONDAY);
+    await tick(walk, MONDAY);
+
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.totalCents).toBe(175);
+    expect(earnings.completions).toBe(3);
+
+    const [first, second] = earnings.people;
+    expect(first?.displayName).toBe('Anna');
+    expect(first?.totalCents).toBe(75);
+    // Biggest earner first, because that is the line somebody checks.
+    expect(first?.tasks.map((line) => line.title)).toEqual(['Bins out', 'Dishwasher']);
+    expect(second?.totalCents).toBe(100);
+  });
+
+  it('counts every day of a recurring chore separately', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', {
+      personId: anna.id,
+      amountCents: 50,
+      frequency: 'weekly',
+      weekdays: [0],
+      startsOn: '2026-03-02',
+    });
+
+    for (const day of ['2026-03-02', '2026-03-09', '2026-03-16']) await tick(bins, day);
+
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.people[0]?.tasks[0]?.completions).toBe(3);
+    expect(earnings.people[0]?.totalCents).toBe(150);
+  });
+
+  it('pays an overdue card once however many days it stands for', async () => {
+    const anna = await addPerson('Anna');
+    const daily = await addTask('Dishwasher', {
+      personId: anna.id,
+      amountCents: 50,
+      frequency: 'weekly',
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      startsOn: '2026-03-02',
+    });
+
+    // Four days go by untouched, then the pile is ticked on the fifth.
+    const board = await getBoard('2026-03-06');
+    const card = board.columns[0]?.overdue[0];
+    expect(card?.missedCount).toBe(4);
+    await tick(daily, card!.dayKey);
+
+    // Nobody empties Tuesday's dishwasher on Friday; they empty the dishwasher.
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.people[0]?.tasks[0]?.completions).toBe(1);
+    expect(earnings.totalCents).toBe(50);
+  });
+
+  it('leaves a settled month alone when the price goes up', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+    await tick(bins, MONDAY);
+
+    await call(`/tasks/${bins.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amountCents: 100 }),
+    });
+
+    // The tick carries the price it was made at. A raise today is not backpay.
+    expect((await getEarnings(MARCH)).totalCents).toBe(50);
+  });
+
+  it('charges the new price to ticks made after the raise', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', {
+      personId: anna.id,
+      amountCents: 50,
+      frequency: 'weekly',
+      weekdays: [0],
+    });
+    await tick(bins, '2026-03-02');
+
+    await call(`/tasks/${bins.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amountCents: 100 }),
+    });
+    await tick(bins, '2026-03-09');
+
+    expect((await getEarnings(MARCH)).totalCents).toBe(150);
+  });
+
+  it('leaves a settled month alone when the chore changes hands', async () => {
+    const anna = await addPerson('Anna');
+    const ben = await addPerson('Ben');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+    await tick(bins, MONDAY);
+
+    await call(`/tasks/${bins.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ personId: ben.id }),
+    });
+
+    const earnings = await getEarnings(MARCH);
+    const named = (name: string): number =>
+      earnings.people.find((person) => person.displayName === name)?.totalCents ?? -1;
+    // Handing over the bins does not hand over the month somebody else did them.
+    expect(named('Anna')).toBe(50);
+    expect(named('Ben')).toBe(0);
+  });
+
+  it('takes the money back with the tick, and re-prices a re-tick', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+
+    await tick(bins, MONDAY);
+    await tick(bins, MONDAY, false);
+    expect((await getEarnings(MARCH)).totalCents).toBe(0);
+
+    await call(`/tasks/${bins.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amountCents: 100 }),
+    });
+    await tick(bins, MONDAY);
+    // The tick was taken back, so what comes back is a new one at today's price.
+    expect((await getEarnings(MARCH)).totalCents).toBe(100);
+  });
+
+  it('keeps the first price when the same day is ticked twice', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+
+    await tick(bins, MONDAY);
+    await call(`/tasks/${bins.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ amountCents: 100 }),
+    });
+    // Nothing was done twice, so nothing may be re-priced by a second tap.
+    await tick(bins, MONDAY);
+
+    expect((await getEarnings(MARCH)).totalCents).toBe(50);
+  });
+
+  it('gives everyone a card, so a blank month reads as nothing yet', async () => {
+    await addPerson('Anna');
+    await addPerson('Ben');
+
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.people.map((person) => person.displayName)).toEqual(['Anna', 'Ben']);
+    expect(earnings.people.every((person) => person.totalCents === 0)).toBe(true);
+    expect(earnings.totalCents).toBe(0);
+  });
+
+  it('keeps what a departed person earned, without their name on it', async () => {
+    const anna = await addPerson('Anna');
+    const bins = await addTask('Bins out', { personId: anna.id, amountCents: 50 });
+    await tick(bins, MONDAY);
+    await call(`/people/${anna.id}`, { method: 'DELETE' });
+
+    // The money is still recorded; it simply falls in with the unassigned work,
+    // exactly as the chore itself does.
+    const earnings = await getEarnings(MARCH);
+    expect(earnings.people.map((person) => person.displayName)).toEqual(['Anyone']);
+    expect(earnings.totalCents).toBe(50);
+  });
+
+  it('rejects a month that is not one', async () => {
+    const { status } = await call('/tasks/earnings?month=2026-3');
+    expect(status).toBe(422);
+  });
+
+  it('defaults to the month the display is in', async () => {
+    const { body } = await call<{ earnings: TaskEarnings }>('/tasks/earnings');
+    expect(body.earnings.month).toMatch(/^\d{4}-\d{2}$/);
+  });
+});
+
 describe('editing tasks', () => {
   it('drops weekdays a task no longer has a use for', async () => {
     const task = await addTask('Bins out', { frequency: 'weekly', weekdays: [0, 3] });
@@ -497,6 +726,28 @@ describe('day keys never pass through a timezone', () => {
     expect(taskDays(weekly, MONDAY, '2026-03-15')).toEqual(['2026-03-05', '2026-03-12']);
   });
 
+  it('bounds a month by its own first and last day, whatever the host clock is', async () => {
+    const anna = await addPerson('Anna');
+    const daily = await addTask('Dishwasher', {
+      personId: anna.id,
+      amountCents: 50,
+      frequency: 'weekly',
+      weekdays: [0, 1, 2, 3, 4, 5, 6],
+      startsOn: '2026-02-01',
+    });
+
+    // The two days either side of March, and the two days inside it. In a zone
+    // past UTC+12 a month derived by conversion would pull the 28th of February
+    // in or push the 31st of March out.
+    for (const day of ['2026-02-28', '2026-03-01', '2026-03-31', '2026-04-01']) {
+      await tick(daily, day);
+    }
+
+    expect((await getEarnings(MARCH)).totalCents).toBe(100);
+    expect((await getEarnings('2026-02')).totalCents).toBe(50);
+    expect((await getEarnings('2026-04')).totalCents).toBe(50);
+  });
+
   it('holds a task to the day it was created for, and ticks it on that day', async () => {
     const anna = await addPerson('Anna');
     const task = await addTask('Bins out', { personId: anna.id, startsOn: '2026-03-08' });
@@ -515,5 +766,43 @@ describe('day keys never pass through a timezone', () => {
       .prepare('SELECT day_key FROM task_completion WHERE task_id = ?')
       .get(task.id) as { day_key: string };
     expect(stored.day_key).toBe('2026-03-08');
+  });
+});
+
+/**
+ * A month is a civil date in exactly the way a day is, and the same rule
+ * applies: `YYYY-MM` is a prefix of a day key, and neither end of it may ever be
+ * derived by converting an instant. These hold identically under all four zones
+ * CI runs the suite in.
+ */
+describe('month keys', () => {
+  it('reads a month straight off a day key', () => {
+    expect(monthKeyOf('2026-03-31')).toBe('2026-03');
+    expect(monthKeyOf('2026-01-01')).toBe('2026-01');
+  });
+
+  it('bounds a month by its own last day, leap years included', () => {
+    expect(monthDayRange('2026-03')).toEqual({ start: '2026-03-01', end: '2026-03-31' });
+    expect(monthDayRange('2026-02')).toEqual({ start: '2026-02-01', end: '2026-02-28' });
+    expect(monthDayRange('2028-02')).toEqual({ start: '2028-02-01', end: '2028-02-29' });
+    expect(monthDayRange('2026-04')).toEqual({ start: '2026-04-01', end: '2026-04-30' });
+  });
+
+  it('steps across the turn of the year in both directions', () => {
+    expect(addMonthsToKey('2026-12', 1)).toBe('2027-01');
+    expect(addMonthsToKey('2026-01', -1)).toBe('2025-12');
+    expect(addMonthsToKey('2026-03', -14)).toBe('2025-01');
+    expect(addMonthsToKey('2026-03', 22)).toBe('2028-01');
+  });
+});
+
+describe('formatMoney', () => {
+  it('drops the pence when there are none, and keeps both digits when there are', () => {
+    expect(formatMoney(0)).toBe('$0');
+    expect(formatMoney(200)).toBe('$2');
+    expect(formatMoney(250)).toBe('$2.50');
+    // Never `$2.5`: a column of amounts has to line up.
+    expect(formatMoney(205)).toBe('$2.05');
+    expect(formatMoney(50)).toBe('$0.50');
   });
 });

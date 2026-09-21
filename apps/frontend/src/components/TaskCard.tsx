@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { type TaskInstance } from '@picalendar/shared';
+import { formatMoney, type TaskInstance } from '@picalendar/shared';
 import { dayKeyRelativeLabel } from '../utils/datetime.js';
 
 /**
@@ -41,7 +41,16 @@ export function TaskCard({
         </span>
         <i className={`bi ${instance.icon} task-card__icon`} aria-hidden="true" />
         <span className="task-card__text">
-          <span className="task-card__title">{instance.title}</span>
+          <span className="task-card__title">
+            {instance.title}
+            {/* Only when there is one to show. A household that does not pay
+                for chores never sees a `$0` it has to learn to ignore — and on
+                a board that does, the number beside the words is the whole
+                reason somebody walks over. */}
+            {instance.amountCents > 0 && (
+              <span className="task-card__worth">{formatMoney(instance.amountCents)}</span>
+            )}
+          </span>
           {instance.note && <span className="task-card__note">{instance.note}</span>}
           {overdue && (
             <span className="task-card__overdue">

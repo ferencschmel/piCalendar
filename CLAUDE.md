@@ -127,7 +127,8 @@ or at which Thursday's bins become Wednesday's.
 
 Birthdays live on `birthday` (`birth_month` / `birth_day` / `birth_year`, the
 year separately nullable); `menu_entry.day_key` is a `YYYY-MM-DD` string; and
-`task.starts_on` / `ends_on` and `task_completion.day_key` are the same. None is
+`task.starts_on` / `ends_on` and `task_completion.day_key` are the same. A
+`YYYY-MM` month key is a prefix of a day key and inherits all of it. None is
 materialised: `util/birthdays.ts`, `util/menu.ts` and `util/tasks.ts` derive the
 days per request, so a steady-state sync still writes nothing and all are known
 outside the occurrence window where feed marks are not. Both agenda endpoints
@@ -211,6 +212,23 @@ once rather than once per day it was skipped — and a tick settles every earlie
 miss, which is what stops ticking the pile handing back the next day down.
 Tasks are **not** narrowed by presence: a chore is waiting _because_ its owner
 is out.
+
+A chore can carry a price (`amount_cents`, zero by default), and
+`/tasks/earnings` totals a month of ticks per person. A tick is a **ledger
+entry**: it stores its own copy of the amount and the person, both derived
+server-side at the moment of the tick, exactly as a grocery tick's signature is.
+Summing live through a join to `task` is the obvious design and is wrong twice
+over — a raise would re-price last March as back-pay, and reassigning a chore
+would hand somebody else's month to a sibling. What a chore paid and who it paid
+were settled on the day it was done. Only the title, icon and colour are read
+live, because renaming a chore does not make last month's a different one.
+
+Money is an integer of minor units everywhere and becomes a decimal only in
+`formatMoney`, on its way onto a screen. An overdue card pays **once** however
+many days it stands for, for the same reason it is one card. `/tasks/earnings`
+is the one task page held in a hand rather than read from a wall, so it takes
+`/lists`' 40rem column; its month is an override expiring after two minutes like
+the board's day.
 
 `Layout` wraps every page in the same frame: the page, and `AppNav` along the
 bottom — calendar, tasks, menu, custom lists, settings. It is sticky and takes
