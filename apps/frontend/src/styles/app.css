@@ -1259,34 +1259,6 @@ body,
   }
 }
 
-/* --- Coming soon --------------------------------------------------------- */
-
-/*
- * A navigation entry whose page is not built yet. Centred and deliberately
- * plain: it exists to say "this is not broken, it is not finished".
- */
-.coming-soon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  min-height: 60vh;
-  text-align: center;
-}
-
-.coming-soon__icon {
-  font-size: 3.5rem;
-  line-height: 1;
-  color: var(--bs-secondary-color);
-  opacity: 0.5;
-}
-
-.coming-soon__description {
-  max-width: 32rem;
-  margin: 0;
-}
-
 /* --- Admin --------------------------------------------------------------- */
 
 .feed-url {
@@ -2466,5 +2438,537 @@ body,
 
   .tick-row__toggle {
     gap: 0.6rem;
+  }
+}
+
+/* --- The task board ------------------------------------------------------- */
+
+/*
+ * One column per person, side by side, sized to the viewport less the
+ * navigation bar — the same arithmetic the dashboard does, and for the same
+ * reason: nothing on a wall display may sit under chrome nobody can scroll out
+ * from behind.
+ *
+ * The board itself never scrolls. Each column scrolls its own body instead, so
+ * reaching the bottom of one person's day cannot take somebody else's name off
+ * the screen.
+ */
+.task-board {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--pical-nav-height));
+  height: calc(100dvh - var(--pical-nav-height));
+  padding: 0.75rem 1rem 0;
+  overflow: hidden;
+}
+
+.task-board__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.task-board__title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.task-board__outstanding {
+  font-size: 0.95rem;
+  color: var(--bs-secondary-color);
+}
+
+.task-board__day {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-inline: auto;
+}
+
+.task-board__date {
+  min-width: 13rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.task-board__columns {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 0.75rem;
+  min-height: 0;
+  padding-block: 0.75rem;
+  /*
+   * Columns share the width evenly until there are more of them than fit, at
+   * which point the board scrolls sideways rather than squeezing every name
+   * into something unreadable. A household of four never reaches that; a
+   * household that adds the grandparents does.
+   */
+  overflow-x: auto;
+}
+
+.task-column {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 15rem;
+  min-height: 0;
+  background-color: var(--bs-secondary-bg);
+  border-radius: 0.6rem;
+}
+
+.task-column__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.task-column__swatch {
+  flex: 0 0 auto;
+  width: 0.65rem;
+  height: 1.6rem;
+  border-radius: 0.2rem;
+}
+
+.task-column__name {
+  font-size: 1.15rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-column__count {
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+
+/* A cleared column earns a colour; everything left to do stays quiet, so the
+   one piece of good news on the board is the piece that stands out. */
+.task-column__count--clear {
+  color: var(--bs-success);
+}
+
+.task-column__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.task-column__heading {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+}
+
+.task-column__heading:first-child {
+  margin-top: 0;
+}
+
+/* The only part of the board allowed to shout. */
+.task-column__heading--overdue {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--bs-danger);
+}
+
+.task-column__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.task-column__empty {
+  padding: 1.5rem 0.5rem;
+  margin: 0;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+.task-column__empty i {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 1.6rem;
+  opacity: 0.5;
+}
+
+.task-column__since {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* --- One chore on one day ------------------------------------------------- */
+
+.task-card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  background-color: var(--bs-body-bg);
+  border-radius: 0.45rem;
+  box-shadow: inset 0 0 0 1px var(--bs-border-color);
+}
+
+/*
+ * The whole card is the tick target. This is reached by an arm stretched at a
+ * wall, not by a mouse, and a 24px checkbox is not something a person finds
+ * from a metre away.
+ */
+.task-card__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0.5rem 0.4rem 0.5rem 0.6rem;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-left: 0.25rem solid var(--pical-task-color, var(--bs-primary));
+  border-radius: 0.45rem 0 0 0.45rem;
+}
+
+.task-card__box {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.1rem;
+  border: 2px solid var(--bs-border-color);
+  border-radius: 0.3rem;
+}
+
+.task-card--done .task-card__box {
+  color: #fff;
+  background-color: var(--bs-success);
+  border-color: var(--bs-success);
+}
+
+.task-card__icon {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+  font-size: 1.05rem;
+  color: var(--pical-task-color, var(--bs-primary));
+}
+
+.task-card__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.task-card__title {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+/* Struck through as well as faded: at a distance the line is what reads, and
+   the fade alone is easy to mistake for a card that is simply further away. */
+.task-card--done .task-card__title {
+  color: var(--bs-secondary-color);
+  text-decoration: line-through;
+}
+
+.task-card__note {
+  font-size: 0.8rem;
+  color: var(--bs-secondary-color);
+}
+
+.task-card__overdue {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-danger);
+}
+
+/* Outside the tick target, so a pencil cannot be hit while aiming for a tick. */
+.task-card__edit {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding-inline: 0.5rem;
+  color: var(--bs-secondary-color);
+  opacity: 0.45;
+}
+
+.task-card__edit:hover,
+.task-card__edit:focus-visible {
+  color: var(--bs-emphasis-color);
+  opacity: 1;
+}
+
+.task-board__empty {
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--bs-secondary-color);
+}
+
+.task-board__empty-icon {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 3rem;
+  opacity: 0.35;
+}
+
+/*
+ * Bottom right, above the navigation bar. A wall display has no keyboard
+ * shortcut and no menu bar; the one thing somebody standing at it wants to add
+ * is a task, and it should be under the hand that is already touching the
+ * screen.
+ */
+.task-board__add {
+  position: fixed;
+  right: 1.25rem;
+  bottom: calc(var(--pical-nav-height) + 1rem);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: 1.4rem;
+  color: #fff;
+  background-color: var(--bs-primary);
+  border-radius: 50%;
+  box-shadow: 0 0.25rem 0.75rem rgb(0 0 0 / 30%);
+}
+
+.task-board__add:hover,
+.task-board__add:focus-visible {
+  color: #fff;
+  filter: brightness(1.1);
+}
+
+/* --- Writing a task up ---------------------------------------------------- */
+
+.task-editor {
+  max-width: 60rem;
+  margin-inline: auto;
+}
+
+.task-editor__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.task-editor__crumb {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: auto;
+}
+
+.task-editor__crumb a {
+  text-decoration: none;
+  color: var(--bs-secondary-color);
+}
+
+.task-editor__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.task-editor__main {
+  display: flex;
+  flex: 1 1 22rem;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.task-editor__side {
+  display: flex;
+  flex: 0 1 14rem;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.task-editor__schedule {
+  padding: 1rem;
+  background-color: var(--bs-secondary-bg);
+  border-radius: 0.5rem;
+}
+
+.task-editor__weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.task-editor__weekday {
+  min-width: 3.1rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.9rem;
+  color: inherit;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.4rem;
+}
+
+.task-editor__weekday--on {
+  color: #fff;
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+/*
+ * The schedule read back in words. Four controls can combine into something
+ * nobody predicted — "every other week on Mon & Thu, from 2 March" is the only
+ * way to be sure the form says what somebody meant.
+ */
+.task-editor__preview {
+  margin: 0.9rem 0 0;
+  font-size: 0.9rem;
+  color: var(--bs-secondary-color);
+}
+
+.task-editor__icons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.35rem;
+}
+
+.task-editor__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-size: 1.1rem;
+  color: inherit;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.4rem;
+}
+
+.task-editor__icon--on {
+  color: #fff;
+  background-color: var(--bs-primary);
+  border-color: var(--bs-primary);
+}
+
+.task-editor__last {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color);
+}
+
+/* --- Every task the household has written down ---------------------------- */
+
+.task-index {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.task-index__row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem 0.75rem;
+  text-decoration: none;
+  color: inherit;
+  background-color: var(--bs-secondary-bg);
+  border-radius: 0.5rem;
+}
+
+.task-index__row:hover {
+  background-color: var(--bs-tertiary-bg);
+}
+
+.task-index__row--retired {
+  opacity: 0.55;
+}
+
+.task-index__icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  color: #fff;
+  border-radius: 0.4rem;
+}
+
+.task-index__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.task-index__title {
+  font-weight: 500;
+}
+
+.task-index__meta {
+  font-size: 0.82rem;
+  color: var(--bs-secondary-color);
+}
+
+.task-index__chevron {
+  margin-left: auto;
+  color: var(--bs-secondary-color);
+}
+
+/*
+ * On a phone the columns stop being columns. A board narrower than about two
+ * of them is read one person at a time, scrolling down the page rather than
+ * inside each column — the side-by-side comparison is the whole point of the
+ * wide layout and there is no way to keep it here worth having.
+ */
+@media (max-width: 36rem) {
+  .task-board {
+    height: auto;
+    overflow: visible;
+  }
+
+  .task-board__columns {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+
+  .task-column {
+    min-height: 0;
+  }
+
+  .task-column__body {
+    overflow-y: visible;
+  }
+
+  .task-board__date {
+    min-width: 9rem;
+    font-size: 0.95rem;
   }
 }

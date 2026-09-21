@@ -527,6 +527,101 @@ is a **404** rather than a silently stored row that matches nothing.
 
 ---
 
+## Tasks
+
+Chores, and who they belong to. Open, for the same reason Dishes, Menu and
+Lists are: ticking off the bins is what the feature is for, and a wall display
+that needed a sign-in would not get used.
+
+| Route                                  | Body                      | Notes                                                    |
+| -------------------------------------- | ------------------------- | -------------------------------------------------------- |
+| `GET /api/tasks?day=`                  | —                         | The board; `day` defaults to today in `DISPLAY_TIMEZONE` |
+| `POST /api/tasks/:id/completions?day=` | `{ dayKey, completed }`   | Ticks one day off, returns the refreshed board           |
+| `GET /api/tasks/definitions`           | —                         | The task rows themselves, retired ones included          |
+| `GET /api/tasks/definitions/:id`       | —                         | One task plus `lastCompletedOn`                          |
+| `POST /api/tasks`                      | task fields               | **201**                                                  |
+| `PATCH /api/tasks/:id`                 | same fields, all optional | **422** when the _merged_ schedule contradicts itself    |
+| `DELETE /api/tasks/:id`                | —                         | **204**; cascades to the completions                     |
+
+### A task names a day, not an instant
+
+Every date on a task — `startsOn`, `endsOn`, the day it is due, the day it was
+ticked for — is a `YYYY-MM-DD` key. This is the third time the API takes that
+exception, after birthdays and menus, and for the same reason: nobody takes the
+bins out at 18:42, and an epoch anchor would have a display east of UTC asking
+for it a day early. Only `completedAt` is an instant, because _when_ something
+was done is a moment.
+
+### The schedule
+
+```json
+{
+  "frequency": "once | weekly | monthly",
+  "interval": 2,
+  "weekdays": [0, 3],
+  "startsOn": "2026-03-02",
+  "endsOn": null
+}
+```
+
+`once` is a frequency rather than a separate kind of row, which is what lets one
+table, one derivation and one completion key serve both.
+
+`weekdays` is Monday-first (`0` = Monday), matching the month and year grids,
+and applies to `weekly` only. `interval` is "every n-th": `2` is every other
+week, and it counts **between the Mondays** of the anchor's week and the
+candidate's, so an anchor mid-week does not shift the phase.
+
+`startsOn` does two jobs and they are the same job: for a one-off it is the
+day, and for anything recurring it is the day the pattern counts from. A
+monthly task takes its date from it too — there is no separate day-of-month to
+contradict it — and a month too short for that date clamps to its last day, so
+a chore on the 31st still happens in February.
+
+Recurring tasks are **not** materialised. `util/tasks.ts` derives the days per
+request, exactly as birthdays and menus are derived, so a steady-state sync
+still writes nothing and a chore is known outside the occurrence window.
+
+### The board
+
+One column per person, plus a last column for chores nobody is named on —
+"whoever is about" is a real answer, and `personId: null` is how it is spelled.
+Every active person gets a column even when it is empty; anyone else holding
+work gets one too, so a person retired mid-week cannot take their chores off
+the wall with them.
+
+**Not narrowed by presence**, deliberately, in the way birthdays are not. The
+agenda hides a calendar nobody is home for; a chore is the opposite — it is
+waiting _because_ somebody is out.
+
+### Overdue is bounded, and says so
+
+`overdueFrom` is `TASK_OVERDUE_LOOKBACK_DAYS` (14) before the board's day.
+Anything older is not known to be done — it is simply no longer asked about —
+and reporting the window is what keeps an empty pile honest, the same
+distinction `coverageStart`/`coverageEnd` preserve on the density endpoint.
+
+Within that window there is **at most one overdue card per task**, carrying
+`missedCount` and `missedSince`. A recurring chore is done once, not once per
+day it was skipped, so a missed day earlier than the task's most recent tick is
+dropped: doing the chore clears its backlog. Without that, ticking the pile
+would appear to do nothing, and a daily chore missed for a fortnight would fill
+a column with fourteen identical rows that push the day's own work off a screen
+nobody can scroll.
+
+### Completions
+
+A tick is keyed by task **and** day, because completion belongs to the
+occurrence: Monday's bins being out says nothing about next Monday's. The day
+is part of the request rather than assumed to be today — the overdue pile is
+full of other days — and a day the task does not fall on is a **404**, since
+storing it would leave a row no derivation ever reads back.
+
+Re-ticking the same day leaves the original `completedAt` alone. Nothing was
+done twice.
+
+---
+
 ## Presence _(camera, future)_
 
 ### `GET /api/presence`

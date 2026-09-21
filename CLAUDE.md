@@ -119,15 +119,17 @@ midnight belongs to the earlier day only. One shared bucketing function enforces
 this for both the agenda and the density endpoints — keep it that way, or a dot
 will appear on a day the agenda shows as empty.
 
-**Birthdays and menus are the exceptions to all of the above.** Both store a
-_civil_ date rather than unix seconds, because both name a day rather than an
-instant — there is no timezone at which someone stops having been born on the
-3rd of March, or at which Wednesday's dinner becomes Tuesday's.
+**Birthdays, menus and tasks are the exceptions to all of the above.** All
+three store a _civil_ date rather than unix seconds, because each names a day
+rather than an instant — there is no timezone at which someone stops having
+been born on the 3rd of March, at which Wednesday's dinner becomes Tuesday's,
+or at which Thursday's bins become Wednesday's.
 
 Birthdays live on `birthday` (`birth_month` / `birth_day` / `birth_year`, the
-year separately nullable); `menu_entry.day_key` is a `YYYY-MM-DD` string.
-Neither is materialised: `util/birthdays.ts` and `util/menu.ts` derive the days
-per request, so a steady-state sync still writes nothing and both are known
+year separately nullable); `menu_entry.day_key` is a `YYYY-MM-DD` string; and
+`task.starts_on` / `ends_on` and `task_completion.day_key` are the same. None is
+materialised: `util/birthdays.ts`, `util/menu.ts` and `util/tasks.ts` derive the
+days per request, so a steady-state sync still writes nothing and all are known
 outside the occurrence window where feed marks are not. Both agenda endpoints
 call those functions, for the same reason the two queries share a `WHERE`
 builder. Neither is narrowed by presence — a birthday belongs to no calendar,
@@ -196,13 +198,27 @@ same way, returning to 08:00–20:00 two minutes after the last touch.
 `AgendaResponse.revision` changes only when ingest actually wrote something, so a
 client can skip a repaint on an unchanged poll.
 
+`/tasks` is the chore board: a column per person, side by side, because the
+question a household asks a wall is not "what is outstanding" but "what is
+_mine_". Under each name is the day, split morning / afternoon, and above it the
+overdue pile — the only part allowed to shout. Each column scrolls its own body
+so reaching the bottom of one person's day cannot take another name off the
+wall, and a ticked card stays put rather than sinking the way a bought grocery
+line does: this board is read all day by the same people. The viewed day is an
+override expiring after two minutes, like the dashboard's anchors. At most one
+overdue card per task carries `missedCount`, because a recurring chore is done
+once rather than once per day it was skipped — and a tick settles every earlier
+miss, which is what stops ticking the pile handing back the next day down.
+Tasks are **not** narrowed by presence: a chore is waiting _because_ its owner
+is out.
+
 `Layout` wraps every page in the same frame: the page, and `AppNav` along the
 bottom — calendar, tasks, menu, custom lists, settings. It is sticky and takes
 real height, and the dashboard sizes itself to the viewport _minus_
 `--pical-nav-height`; keep those two in step or the day grid runs under the bar.
-The admin page is the "Settings" entry, still routed at `/admin`. Tasks is the
-last `ComingSoon` placeholder. `Layout`'s `FULL_BLEED` set decides which routes
-skip the padded container — the dashboard and the menu planner.
+The admin page is the "Settings" entry, still routed at `/admin`. `Layout`'s
+`FULL_BLEED` set decides which routes skip the padded container — the dashboard,
+the menu planner and the task board.
 
 `/lists` is the one part of the app **not** read from across a room: it is held
 in a hand, in a shop, by somebody who is not carrying the wall display with
@@ -243,3 +259,7 @@ work on these pages sized for a thumb, not for viewing distance.
 - Birthdays are deliberately **not** narrowed by presence or `personId`. They
   are a separate table from `person` for the same reason: the two are different
   sets of people, and a birthday belongs to no calendar.
+- Tasks are **not** narrowed by presence either, but for the opposite reason to
+  birthdays: a chore is waiting precisely because its owner is out. Deleting a
+  person `SET NULL`s their tasks rather than cascading — somebody moving out
+  does not mean the bins stop needing to go out.

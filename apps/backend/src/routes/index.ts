@@ -8,6 +8,7 @@ import { feedsRouter } from './feeds.js';
 import { healthRouter } from './health.js';
 import { peopleRouter } from './people.js';
 import { presenceRouter } from './presence.js';
+import { tasksRouter } from './tasks.js';
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -20,5 +21,6 @@ export function createApiRouter(): Router {
   router.use('/feeds', feedsRouter);
   router.use('/people', peopleRouter);
   router.use('/presence', presenceRouter);
+  router.use('/tasks', tasksRouter);
   return router;
 }

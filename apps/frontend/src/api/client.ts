@@ -28,6 +28,10 @@ import type {
   PlannedDish,
   PresenceState,
   SyncRun,
+  Task,
+  TaskBoard,
+  TaskInputPayload,
+  TaskUpdatePayload,
   Wish,
   WishInputPayload,
 } from '@picalendar/shared';
@@ -115,6 +119,11 @@ function groceryQuery(params: GroceryParams): string {
   if (params.days) search.set('days', String(params.days));
   const query = search.toString();
   return query ? `?${query}` : '';
+}
+
+/** The day a board is asked for, omitted to mean "today, where the wall is". */
+function taskQuery(params: { day?: string }): string {
+  return params.day ? `?day=${params.day}` : '';
 }
 
 export const api = {
@@ -233,6 +242,38 @@ export const api = {
     request<{ list: GroceryList }>(`/lists/grocery/checks${groceryQuery(params)}`, {
       method: 'DELETE',
     }).then((r) => r.list),
+
+  /**
+   * The board for a day. `day` is a day key, never an instant — a task names a
+   * day, and the server defaults to today in the display timezone rather than
+   * in the browser's.
+   */
+  taskBoard: (params: { day?: string } = {}) =>
+    request<{ board: TaskBoard }>(`/tasks${taskQuery(params)}`).then((r) => r.board),
+  /**
+   * Returns the whole refreshed board rather than the one task, for the same
+   * reason a grocery tick does: one round trip per tap, and the board may have
+   * moved under whoever is standing at it.
+   */
+  tickTask: (params: { day?: string }, taskId: string, dayKey: string, completed: boolean) =>
+    request<{ board: TaskBoard }>(`/tasks/${taskId}/completions${taskQuery(params)}`, {
+      method: 'POST',
+      body: JSON.stringify({ dayKey, completed }),
+    }).then((r) => r.board),
+
+  /** The task definitions, for the manage page and the editor. */
+  listTasks: () => request<{ tasks: Task[] }>('/tasks/definitions').then((r) => r.tasks),
+  getTask: (id: string) =>
+    request<{ task: Task; lastCompletedOn: string | null }>(`/tasks/definitions/${id}`),
+  createTask: (input: TaskInputPayload) =>
+    request<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify(input) }).then(
+      (r) => r.task,
+    ),
+  updateTask: (id: string, patch: TaskUpdatePayload) =>
+    request<{ task: Task }>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then(
+      (r) => r.task,
+    ),
+  deleteTask: (id: string) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
 
   listFeeds: () => request<{ feeds: Feed[] }>('/feeds').then((r) => r.feeds),
   getFeed: (id: string) => request<{ feed: Feed; recentRuns: SyncRun[] }>(`/feeds/${id}`),

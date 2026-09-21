@@ -7,10 +7,12 @@ import { AppNav } from './AppNav.js';
  *
  * The dashboard, because it is the wall. The menu planner, because a week of
  * meals is seven columns and a rail, and it needs the whole screen for the
- * same reason the calendar does. The dish editor is an ordinary page and stays
- * out — it is read and typed into, not glanced at from across the room.
+ * same reason the calendar does. The task board, because it is a column per
+ * person side by side and the columns scroll themselves. The dish and task
+ * editors are ordinary pages and stay out — they are read and typed into, not
+ * glanced at from across the room.
  */
-const FULL_BLEED = new Set(['/', '/menu']);
+const FULL_BLEED = new Set(['/', '/menu', '/tasks']);
 
 /**
  * One frame for every page: the page itself, and the navigation bar along the

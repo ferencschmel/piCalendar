@@ -283,6 +283,55 @@ target rather than the checkbox inside it, the day picker offers fixed options
 instead of a number field, and the header, day picker and add form stay stuck to
 the top while the list scrolls under them.
 
+### Tasks are the third civil date
+
+Chores go on `task`, and a tick goes on `task_completion`. Both carry
+`YYYY-MM-DD` keys rather than unix seconds, for the reason birthdays and menus
+already took the exception: nobody takes the bins out at 18:42, they take them
+out on Thursday morning, and an epoch anchor would have a display east of UTC
+asking a day early. Only `completed_at` is an instant, because _when_ it was
+done is a moment — the two sit in one row deliberately, the day key being the
+question and the timestamp the answer.
+
+Recurring tasks are **not** materialised. A schedule is four integers and a
+date, and `util/tasks.ts` turns those into a day key by arithmetic — `occursOn`
+is constant time, so a chore anchored years ago costs no more to answer than
+one anchored last week. The three properties follow as before: a steady-state
+sync writes nothing, a chore is known outside the occurrence window, and there
+is no zone maths to get wrong. `test/tasks.test.ts` pins that under all four CI
+zones.
+
+`startsOn` does two jobs and they are the same job: the day for a one-off, the
+anchor for anything recurring. It is also where a monthly task gets its date,
+so there is no second field to contradict it — and a month too short clamps to
+its last day, because losing the chore in every month without a 31st is worse.
+A weekly interval counts between the _Mondays_ of the anchor's week and the
+candidate's, so an anchor mid-week does not shift which week is the odd one.
+
+The board is a column per person because that is the question a household asks
+a wall — not "what is outstanding" but "what is _mine_". Chores nobody is named
+on get the last column: `personId` is nullable for the same reason
+`menu_wish.person_id` is, and a chore with no name on it is still a chore. When
+a person is deleted their tasks are `SET NULL` rather than cascaded — somebody
+moving out does not mean the bins stop needing to go out, and the work should
+land in front of the household to be reassigned rather than vanish.
+
+Tasks are **not** narrowed by presence, and that is the opposite call to the
+agenda's rather than an oversight. A calendar is hidden when nobody is home
+because an empty house has no practices to show; a chore is waiting _because_
+its owner is out, and one that disappeared from the wall during football is one
+nobody takes out.
+
+Overdue is bounded at `TASK_OVERDUE_LOOKBACK_DAYS` (14) and the board reports
+`overdueFrom`, so an empty pile can be told from one nobody asks about any more
+— the same distinction the density endpoint's coverage window preserves. Within
+the window there is at most one card per task, carrying `missedCount` and
+`missedSince`: a missed day earlier than the task's most recent tick is
+dropped, because a recurring chore is done once rather than once per day it was
+skipped. That is what makes ticking the pile settle it instead of handing back
+the next day down, and it is why a column's "3 left" is a number somebody can
+act on.
+
 ## Frontend
 
 React 18 + Bootstrap 5, built by Vite, served as static files by the backend.
@@ -302,13 +351,26 @@ floating over the page, and the dashboard subtracts that height from the
 viewport (`--pical-nav-height`) — nothing on an unattended display may end up
 underneath chrome nobody can scroll out from behind.
 
-Tasks is a placeholder for now, and says so on the page rather than showing an
-empty shell: a blank page is indistinguishable from one that failed to load.
 Settings is the admin page, still routed at `/admin`.
 
 Inside the dashboard's own header, the view switcher and — off the week view —
 a period stepper sit between the clock and the sync status, the one part of the
 header meant to be touched; everything either side of them is information.
+
+`/tasks` is the third full-bleed route, after the dashboard and the menu
+planner, and for the same reason: a column per person side by side needs the
+whole screen. The board itself never scrolls — each column scrolls its own
+body, so reaching the bottom of one person's day cannot take somebody else's
+name off the wall. The whole card is the tick target, as a list row is, with
+the edit pencil outside it. Unlike a bought grocery line a ticked card stays
+where it is: a shopping list is walked down once, where a chore board is read
+all day by the same people and a card that moved under the hand that ticked it
+would cost them the place they had learned. The viewed day is an override that
+expires two minutes after the last touch, exactly like the dashboard's period
+anchor and the day grid's pan — a board left on Thursday by whoever walked past
+would otherwise still show Thursday on Saturday. Chores are written up on their
+own route (`/tasks/:id`), remounted per id, with `/tasks/all` listing the
+definitions including retired ones, which are by design nowhere on the board.
 
 ### Four views
 
